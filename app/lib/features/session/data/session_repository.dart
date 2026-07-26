@@ -3,6 +3,7 @@ import 'package:drift/drift.dart';
 import '../../../core/db/database.dart';
 import '../../../core/ids.dart';
 import '../domain/active_session.dart';
+import 'interruption_repository.dart';
 
 class HistoryEntry {
   const HistoryEntry({
@@ -20,10 +21,57 @@ class HistoryEntry {
   final String? endReason;
 }
 
+/// Everything the Stats inline expansion shows for one session: its survey (if
+/// it was rated) and its interruption log.
+class SessionDetailView {
+  const SessionDetailView({
+    required this.interruptions,
+    this.focusRating,
+    this.comprehensionRating,
+    this.difficultyRating,
+    this.note,
+  });
+
+  final List<InterruptionEntry> interruptions;
+  final int? focusRating;
+  final int? comprehensionRating;
+  final int? difficultyRating;
+  final String? note;
+
+  bool get hasSurvey => focusRating != null;
+}
+
 class SessionRepository {
   SessionRepository(this._db);
 
   final AppDatabase _db;
+
+  Future<SessionDetailView> loadSessionDetail(String sessionId) async {
+    final survey = await (_db.select(_db.sessionSurveys)
+          ..where((t) => t.sessionId.equals(sessionId) & t.deletedAt.isNull()))
+        .getSingleOrNull();
+    // Ordered by id as well as time: drift stores DateTime as epoch SECONDS, so
+    // two events in the same second would otherwise sort arbitrarily between
+    // runs. newId() is UUIDv7, which is lexicographically time-ordered.
+    final rows = await (_db.select(_db.interruptions)
+          ..where((t) => t.sessionId.equals(sessionId) & t.deletedAt.isNull())
+          ..orderBy([
+            (t) => OrderingTerm.asc(t.occurredAt),
+            (t) => OrderingTerm.asc(t.id),
+          ]))
+        .get();
+    return SessionDetailView(
+      interruptions: [
+        for (final r in rows)
+          InterruptionEntry(
+              kind: r.kind, occurredAt: r.occurredAt, durationS: r.durationS),
+      ],
+      focusRating: survey?.focusRating,
+      comprehensionRating: survey?.comprehensionRating,
+      difficultyRating: survey?.difficultyRating,
+      note: survey?.note,
+    );
+  }
 
   Future<void> insertStartedSession(ActiveSession s) async {
     await _db.into(_db.sessions).insert(SessionsCompanion.insert(
