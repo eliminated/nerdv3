@@ -8,39 +8,98 @@ import '../../../core/providers.dart';
 import '../../session/presentation/history_screen.dart';
 import '../../session/presentation/session_controller.dart';
 import '../../session/presentation/session_screen.dart';
+import '../data/subject_repository.dart';
 
-final subjectsProvider = StreamProvider<List<Subject>>(
-    (ref) => ref.watch(subjectRepositoryProvider).watchSubjects());
+const subjectPalette = <String>[
+  '#EF5350', '#FFA726', '#FFD54F', '#66BB6A',
+  '#4FC3F7', '#7986CB', '#BA68C8', '#A1887F',
+];
+const subjectSources = <String>['self', 'school', 'university', 'course'];
+
+Color colorFromHex(String hex) =>
+    Color(0xFF000000 | int.parse(hex.substring(1), radix: 16));
+
+class SubjectDraft {
+  const SubjectDraft(
+      {required this.name, this.color, required this.source, this.sourceName});
+
+  final String name;
+  final String? color;
+  final String source;
+  final String? sourceName;
+}
+
+// Riverpod 3 moved StateProvider to a legacy import; use the Notifier
+// pattern already proven in SessionController instead.
+final showArchivedProvider =
+    NotifierProvider<ShowArchivedNotifier, bool>(ShowArchivedNotifier.new);
+
+class ShowArchivedNotifier extends Notifier<bool> {
+  @override
+  bool build() => false;
+
+  void toggle() => state = !state;
+}
+
+final subjectsProvider = StreamProvider<List<Subject>>((ref) => ref
+    .watch(subjectRepositoryProvider)
+    .watchSubjects(archived: ref.watch(showArchivedProvider)));
 
 class SubjectListScreen extends ConsumerWidget {
   const SubjectListScreen({super.key});
 
   Future<void> _createSubject(BuildContext context, WidgetRef ref) async {
-    final controller = TextEditingController();
-    final name = await showDialog<String>(
+    final draft = await showDialog<SubjectDraft>(
+      context: context,
+      builder: (context) => const _SubjectDialog(),
+    );
+    if (draft == null) return;
+    await ref.read(subjectRepositoryProvider).createSubject(
+          draft.name,
+          color: draft.color,
+          source: draft.source,
+          sourceName: draft.sourceName,
+        );
+  }
+
+  Future<void> _editSubject(
+      BuildContext context, WidgetRef ref, Subject subject) async {
+    final draft = await showDialog<SubjectDraft>(
+      context: context,
+      builder: (context) => _SubjectDialog(existing: subject),
+    );
+    if (draft == null) return;
+    await ref.read(subjectRepositoryProvider).updateSubject(
+          subject.id,
+          name: draft.name,
+          color: draft.color,
+          source: draft.source,
+          sourceName: draft.sourceName,
+        );
+  }
+
+  Future<void> _confirmDelete(
+      BuildContext context, WidgetRef ref, Subject subject) async {
+    final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('New subject'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(labelText: 'Name'),
-          onSubmitted: (v) => Navigator.of(context).pop(v),
-        ),
+        title: Text('Delete ${subject.name}?'),
+        content: const Text(
+            'The subject leaves your lists. Past sessions keep its name.'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () => Navigator.of(context).pop(false),
             child: const Text('Cancel'),
           ),
           FilledButton(
-            onPressed: () => Navigator.of(context).pop(controller.text),
-            child: const Text('Create'),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete'),
           ),
         ],
       ),
     );
-    if (name != null && name.trim().isNotEmpty) {
-      await ref.read(subjectRepositoryProvider).createSubject(name.trim());
+    if (confirmed ?? false) {
+      await ref.read(subjectRepositoryProvider).deleteSubject(subject.id);
     }
   }
 
@@ -80,11 +139,19 @@ class SubjectListScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final showArchived = ref.watch(showArchivedProvider);
     final subjects = ref.watch(subjectsProvider);
     return Scaffold(
       appBar: AppBar(
         title: const Text('NerdyApp'),
         actions: [
+          IconButton(
+            icon: Icon(
+                showArchived ? Icons.inventory_2 : Icons.inventory_2_outlined),
+            tooltip: showArchived ? 'Show active' : 'Show archived',
+            onPressed: () =>
+                ref.read(showArchivedProvider.notifier).toggle(),
+          ),
           IconButton(
             icon: const Icon(Icons.save_alt),
             tooltip: 'Back up database',
@@ -102,15 +169,57 @@ class SubjectListScreen extends ConsumerWidget {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Error: $e')),
         data: (list) => list.isEmpty
-            ? const Center(child: Text('Create a subject to start studying'))
+            ? Center(
+                child: Text(showArchived
+                    ? 'No archived subjects'
+                    : 'Create a subject to start studying'))
             : ListView.builder(
                 itemCount: list.length,
                 itemBuilder: (context, i) {
                   final subject = list[i];
                   return ListTile(
+                    leading: CircleAvatar(
+                      radius: 14,
+                      backgroundColor: subject.color == null
+                          ? Theme.of(context)
+                              .colorScheme
+                              .surfaceContainerHighest
+                          : colorFromHex(subject.color!),
+                    ),
                     title: Text(subject.name),
-                    trailing: const Icon(Icons.play_arrow),
-                    onTap: () => _startSession(context, ref, subject.id),
+                    subtitle: subject.source == 'self'
+                        ? null
+                        : Text(subject.sourceName == null
+                            ? subject.source
+                            : '${subject.source} · ${subject.sourceName}'),
+                    onTap: showArchived
+                        ? null
+                        : () => _startSession(context, ref, subject.id),
+                    trailing: PopupMenuButton<String>(
+                      icon: const Icon(Icons.more_vert),
+                      onSelected: (action) async {
+                        switch (action) {
+                          case 'edit':
+                            await _editSubject(context, ref, subject);
+                          case 'archive':
+                            await ref
+                                .read(subjectRepositoryProvider)
+                                .setArchived(subject.id,
+                                    archived: !subject.archived);
+                          case 'delete':
+                            await _confirmDelete(context, ref, subject);
+                        }
+                      },
+                      itemBuilder: (context) => [
+                        const PopupMenuItem(value: 'edit', child: Text('Edit')),
+                        PopupMenuItem(
+                            value: 'archive',
+                            child: Text(
+                                subject.archived ? 'Unarchive' : 'Archive')),
+                        const PopupMenuItem(
+                            value: 'delete', child: Text('Delete')),
+                      ],
+                    ),
                   );
                 },
               ),
@@ -119,6 +228,107 @@ class SubjectListScreen extends ConsumerWidget {
         onPressed: () => _createSubject(context, ref),
         child: const Icon(Icons.add),
       ),
+    );
+  }
+}
+
+class _SubjectDialog extends StatefulWidget {
+  const _SubjectDialog({this.existing});
+
+  final Subject? existing;
+
+  @override
+  State<_SubjectDialog> createState() => _SubjectDialogState();
+}
+
+class _SubjectDialogState extends State<_SubjectDialog> {
+  late final TextEditingController _name =
+      TextEditingController(text: widget.existing?.name ?? '');
+  late final TextEditingController _sourceName =
+      TextEditingController(text: widget.existing?.sourceName ?? '');
+  late String? _color = widget.existing?.color;
+  late String _source = widget.existing?.source ?? 'self';
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _sourceName.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final name = _name.text.trim();
+    if (name.isEmpty) return;
+    final sourceName = _sourceName.text.trim();
+    Navigator.of(context).pop(SubjectDraft(
+      name: name,
+      color: _color,
+      source: _source,
+      sourceName: sourceName.isEmpty ? null : sourceName,
+    ));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.existing == null ? 'New subject' : 'Edit subject'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: _name,
+              autofocus: true,
+              decoration: const InputDecoration(labelText: 'Name'),
+              onSubmitted: (_) => _submit(),
+            ),
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 8,
+              children: [
+                for (final hex in subjectPalette)
+                  GestureDetector(
+                    onTap: () =>
+                        setState(() => _color = _color == hex ? null : hex),
+                    child: CircleAvatar(
+                      radius: 14,
+                      backgroundColor: colorFromHex(hex),
+                      child: _color == hex
+                          ? const Icon(Icons.check, size: 16)
+                          : null,
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            DropdownButtonFormField<String>(
+              initialValue: _source,
+              decoration: const InputDecoration(labelText: 'Source'),
+              items: [
+                for (final s in subjectSources)
+                  DropdownMenuItem(value: s, child: Text(s)),
+              ],
+              onChanged: (v) => setState(() => _source = v ?? 'self'),
+            ),
+            TextField(
+              controller: _sourceName,
+              decoration:
+                  const InputDecoration(labelText: 'Source name (e.g. Udemy)'),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _submit,
+          child: Text(widget.existing == null ? 'Create' : 'Save'),
+        ),
+      ],
     );
   }
 }
