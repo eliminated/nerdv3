@@ -1,6 +1,8 @@
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/db/backup.dart';
 import '../../../core/db/database.dart';
 import '../../../core/providers.dart';
 import '../../session/presentation/history_screen.dart';
@@ -51,6 +53,31 @@ class SubjectListScreen extends ConsumerWidget {
     }
   }
 
+  Future<void> _backup(BuildContext context, WidgetRef ref) async {
+    final now = DateTime.now();
+    final stamp = '${now.year}-${now.month.toString().padLeft(2, '0')}-'
+        '${now.day.toString().padLeft(2, '0')}';
+    final location = await getSaveLocation(
+      suggestedName: 'nerdyapp-backup-$stamp.db',
+      acceptedTypeGroups: const [
+        XTypeGroup(label: 'SQLite database', extensions: ['db'])
+      ],
+    );
+    if (location == null) return;
+    try {
+      await backupDatabase(ref.read(databaseProvider), location.path);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Backed up to ${location.path}')));
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Backup failed: $e')));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final subjects = ref.watch(subjectsProvider);
@@ -58,6 +85,11 @@ class SubjectListScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('NerdyApp'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.save_alt),
+            tooltip: 'Back up database',
+            onPressed: () => _backup(context, ref),
+          ),
           IconButton(
             icon: const Icon(Icons.history),
             tooltip: 'History',
