@@ -1,4 +1,4 @@
-import 'package:drift/drift.dart' hide isNull;
+import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -42,5 +42,24 @@ void main() {
     final row = await db.select(db.sessions).getSingle();
     expect(row.updatedAt.toUtc().isAfter(backdated), isTrue,
         reason: 'pause must persist a write (architecture.md §3.4)');
+  });
+
+  test('real-clock session records wall time, active vs paused split',
+      () async {
+    final controller = container.read(sessionControllerProvider.notifier);
+    await controller.start(subjectId);
+    await Future<void>.delayed(const Duration(seconds: 2));
+    await controller.togglePause(); // pause
+    await Future<void>.delayed(const Duration(seconds: 2));
+    await controller.togglePause(); // resume
+    await Future<void>.delayed(const Duration(seconds: 2));
+    await controller.end();
+
+    final row = await db.select(db.sessions).getSingle();
+    // ~4s active, ~2s paused; generous bounds for scheduler jitter.
+    expect(row.actualDurationS, inInclusiveRange(3, 6));
+    expect(row.pausedDurationS, inInclusiveRange(1, 4));
+    expect(row.endReason, 'user_ended');
+    expect(row.endedAt, isNotNull);
   });
 }
