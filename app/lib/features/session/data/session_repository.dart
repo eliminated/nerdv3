@@ -30,7 +30,7 @@ class SessionRepository {
           id: s.id,
           userId: localUserId,
           subjectId: s.subjectId,
-          mode: 'plain',
+          mode: s.mode,
           startedAt: s.startedAt,
         ));
   }

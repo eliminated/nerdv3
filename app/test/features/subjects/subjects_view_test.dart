@@ -7,7 +7,7 @@ import 'package:nerdyapp/core/db/database.dart';
 import 'package:nerdyapp/core/db/local_user.dart';
 import 'package:nerdyapp/core/providers.dart';
 import 'package:nerdyapp/features/subjects/data/subject_repository.dart';
-import 'package:nerdyapp/features/subjects/presentation/subject_list_screen.dart';
+import 'package:nerdyapp/features/subjects/presentation/subjects_view.dart';
 
 void main() {
   Future<AppDatabase> pumpApp(WidgetTester tester) async {
@@ -16,7 +16,7 @@ void main() {
     await ensureLocalUser(db);
     await tester.pumpWidget(ProviderScope(
       overrides: [databaseProvider.overrideWithValue(db)],
-      child: const MaterialApp(home: SubjectListScreen()),
+      child: const MaterialApp(home: Scaffold(body: SubjectsView())),
     ));
     // Never pumpAndSettle while the loading spinner is up (V2-verified hang).
     await tester.pump();
@@ -24,35 +24,30 @@ void main() {
     return db;
   }
 
-  // Unmount the tree before framework teardown: disposing the drift-backed
-  // StreamProvider schedules a close timer, which must fire inside the test
-  // or the pending-timer invariant fails. The pump must advance the fake
-  // clock (a plain pump() schedules a frame without elapsing time).
+  // Unmount before framework teardown: drift-backed StreamProvider disposal
+  // schedules a close timer that must fire inside the test.
   Future<void> unmount(WidgetTester tester) async {
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(seconds: 1));
   }
 
-  testWidgets('creating a subject shows it in the list', (tester) async {
+  testWidgets('creating a subject shows a card in the grid', (tester) async {
     await pumpApp(tester);
-    expect(find.text('Create a subject to start studying'), findsOneWidget);
-
-    await tester.tap(find.byType(FloatingActionButton));
+    await tester.tap(find.text('New subject'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
     await tester.enterText(
         find.ancestor(of: find.text('Name'), matching: find.byType(TextField)),
         'Physics');
     await tester.tap(find.text('Create'));
-    // Pump past the dialog's close transition so its TextField leaves the tree.
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
 
-    expect(find.widgetWithText(ListTile, 'Physics'), findsOneWidget);
+    expect(find.text('Physics'), findsOneWidget);
     await unmount(tester);
   });
 
-  testWidgets('editing a subject renames it in the list', (tester) async {
+  testWidgets('editing a subject renames its card', (tester) async {
     final db = await pumpApp(tester);
     await SubjectRepository(db).createSubject('Chem');
     await tester.pump(const Duration(milliseconds: 100));
@@ -63,18 +58,17 @@ void main() {
     await tester.tap(find.text('Edit'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
-    await tester.enterText(
-        find.widgetWithText(TextField, 'Chem'), 'Chemistry');
+    await tester.enterText(find.widgetWithText(TextField, 'Chem'), 'Chemistry');
     await tester.tap(find.text('Save'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
 
-    expect(find.widgetWithText(ListTile, 'Chemistry'), findsOneWidget);
-    expect(find.widgetWithText(ListTile, 'Chem'), findsNothing);
+    expect(find.text('Chemistry'), findsOneWidget);
+    expect(find.text('Chem'), findsNothing);
     await unmount(tester);
   });
 
-  testWidgets('archiving moves a subject to the archived view',
+  testWidgets('archive moves a subject to the archived table; restore returns it',
       (tester) async {
     final db = await pumpApp(tester);
     await SubjectRepository(db).createSubject('Old semester');
@@ -86,12 +80,16 @@ void main() {
     await tester.tap(find.text('Archive'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
-    expect(find.widgetWithText(ListTile, 'Old semester'), findsNothing);
 
-    await tester.tap(find.byIcon(Icons.inventory_2_outlined));
+    // Card gone from the grid; row present in Archived with a Restore action.
+    expect(find.text('Restore'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Start session…'), findsNothing);
+
+    await tester.tap(find.text('Restore'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
-    expect(find.widgetWithText(ListTile, 'Old semester'), findsOneWidget);
+    expect(find.text('Restore'), findsNothing);
+    expect(find.text('Old semester'), findsOneWidget);
     await unmount(tester);
   });
 
@@ -111,7 +109,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
 
-    expect(find.widgetWithText(ListTile, 'Mistake'), findsNothing);
+    expect(find.text('Mistake'), findsNothing);
     await unmount(tester);
   });
 }

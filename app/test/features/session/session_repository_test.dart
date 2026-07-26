@@ -104,6 +104,14 @@ void main() {
     expect(await db.select(db.sessions).getSingle(), before);
   });
 
+  test('insertStartedSession records the session mode', () async {
+    final s = ActiveSession.start(
+        id: 'sess-f', subjectId: subjectId, startedAt: t0, mode: 'focused');
+    await repo.insertStartedSession(s);
+    final row = await db.select(db.sessions).getSingle();
+    expect(row.mode, 'focused');
+  });
+
   test('recovery closes open sessions as crashed at their last write',
       () async {
     // Simulates: started at t0, last persisted write (a pause) at t0+30min,

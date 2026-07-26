@@ -4,8 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/db/database.dart';
 import 'core/db/local_user.dart';
 import 'core/providers.dart';
+import 'core/shell/app_shell.dart';
+import 'core/theme/modernist.dart';
 import 'features/session/data/session_repository.dart';
-import 'features/subjects/presentation/subject_list_screen.dart';
 
 Future<void> main() async {
   // Required before any provider reaches path_provider (V2-verified crash).
@@ -28,8 +29,8 @@ class NerdyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'NerdyApp',
-      theme: ThemeData(useMaterial3: true, colorSchemeSeed: Colors.indigo),
-      home: const SubjectListScreen(),
+      theme: modernistTheme(),
+      home: const AppShell(),
     );
   }
 }
