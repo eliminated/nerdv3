@@ -1,5 +1,5 @@
 import 'package:drift/native.dart';
-import 'package:drift_dev/api/migrations.dart';
+import 'package:drift_dev/api/migrations_native.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:nerdyapp/core/db/database.dart';
@@ -19,6 +19,7 @@ void main() {
     // validateDropped: true is required or an added table/index passes green.
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(db.close);
-    await verifier.migrateAndValidate(db, 1, validateDropped: true);
+    await verifier.migrateAndValidate(db, 1,
+        options: const ValidationOptions(validateDropped: true));
   });
 }
