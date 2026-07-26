@@ -67,6 +67,7 @@ bootstrap, and a subject repository — 24 passing tests. None of it was broken.
 agent round-trips per task — implement, review, fix, re-review — at about 40 minutes each, so a
 ten-task phase implied something near seven hours. Progress was invisible between round-trips,
 so it read as stalling rather than converging.
+Slow progress, and slow harvest. No production quality at all. 
 
 **The uncomfortable finding.** Every defect the reviews caught was in the *plan*, not in the
 implementations: a foreign key SQLite could never add after the schema freeze; a schema-guard
@@ -323,4 +324,5 @@ Contributions are welcome. Please open an issue before starting significant work
 | ------- | ------- | ---------------- |
 | 1.0 | - Foundation | Claude\nIsaac |
 | 1.1 | - Build iteration V2 → V3 after a from-scratch restart<br>- Filled the iteration-history table, including an honest V1 and V2 post-mortem<br>- Repointed issues link to the nerdv3 repository | Claude\nIsaac |
+| 1.2 | -Truer statement | Isaac |
 
