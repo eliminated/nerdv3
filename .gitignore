@@ -1,0 +1,15 @@
+.claude/
+claude.md
+AGENTS.md
+.superpowers/
+
+.env
+CLAUDE.md
+
+# Flutter / Dart
+app/build/
+app/.dart_tool/
+app/windows/flutter/ephemeral/
+*.g.dart
+app/android/local.properties
+app/android/**/GeneratedPluginRegistrant.java
