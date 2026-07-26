@@ -4,6 +4,7 @@ class ActiveSession {
   const ActiveSession._({
     required this.id,
     required this.subjectId,
+    required this.mode,
     required this.startedAt,
     required this.accumulatedPause,
     required this.pauseStartedAt,
@@ -13,10 +14,12 @@ class ActiveSession {
     required String id,
     required String subjectId,
     required DateTime startedAt,
+    String mode = 'plain',
   }) =>
       ActiveSession._(
         id: id,
         subjectId: subjectId,
+        mode: mode,
         startedAt: startedAt,
         accumulatedPause: Duration.zero,
         pauseStartedAt: null,
@@ -24,6 +27,9 @@ class ActiveSession {
 
   final String id;
   final String subjectId;
+
+  /// 'plain' | 'focused' — chosen at start, immutable for the session's life.
+  final String mode;
   final DateTime startedAt;
   final Duration accumulatedPause;
   final DateTime? pauseStartedAt;
@@ -35,6 +41,7 @@ class ActiveSession {
     return ActiveSession._(
       id: id,
       subjectId: subjectId,
+      mode: mode,
       startedAt: startedAt,
       accumulatedPause: accumulatedPause,
       pauseStartedAt: now,
@@ -46,6 +53,7 @@ class ActiveSession {
     return ActiveSession._(
       id: id,
       subjectId: subjectId,
+      mode: mode,
       startedAt: startedAt,
       accumulatedPause: accumulatedPause + now.difference(pauseStartedAt!),
       pauseStartedAt: null,

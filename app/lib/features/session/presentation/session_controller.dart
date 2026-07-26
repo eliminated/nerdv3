@@ -13,10 +13,10 @@ class SessionController extends Notifier<ActiveSession?> {
 
   DateTime _now() => DateTime.now().toUtc();
 
-  Future<void> start(String subjectId) async {
+  Future<void> start(String subjectId, {String mode = 'plain'}) async {
     if (state != null) throw StateError('a session is already running');
     final session = ActiveSession.start(
-        id: newId(), subjectId: subjectId, startedAt: _now());
+        id: newId(), subjectId: subjectId, startedAt: _now(), mode: mode);
     await ref.read(sessionRepositoryProvider).insertStartedSession(session);
     state = session;
   }

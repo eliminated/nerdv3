@@ -44,6 +44,15 @@ void main() {
         reason: 'pause must persist a write (architecture.md §3.4)');
   });
 
+  test('start records the chosen mode and pause preserves it', () async {
+    final controller = container.read(sessionControllerProvider.notifier);
+    await controller.start(subjectId, mode: 'focused');
+    await controller.togglePause();
+    expect(container.read(sessionControllerProvider)!.mode, 'focused');
+    final row = await db.select(db.sessions).getSingle();
+    expect(row.mode, 'focused');
+  });
+
   test('a pause racing an end cannot resurrect an ended session', () async {
     final controller = container.read(sessionControllerProvider.notifier);
     await controller.start(subjectId);
