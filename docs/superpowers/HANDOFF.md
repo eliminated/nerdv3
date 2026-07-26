@@ -1,6 +1,56 @@
 # Session Handoff — NerdyApp Companion (build iteration V3)
 
-> ## ⏩ LATEST (2026-07-26, "Modernist UI shell" session — same day, second slice) — READ THIS FIRST
+> ## ⏩ LATEST (2026-07-26, "Phase 2 — the signal" session) — READ THIS FIRST
+>
+> **State:** `main`, clean, in sync with `origin`. Last commit `fb9da40` ("feat: phase 2 - the
+> signal (survey persistence + interruption log) (#5)", squash merge) on top of `3df3bad` (UI
+> shell). CI green on branch and on main. **81 tests.** Schema still frozen at v1.
+>
+> **Phase 2 — the signal: CODE DONE & merged (`fb9da40`). The phase is NOT declared done — its
+> manual verification is unrun (see DO THIS NEXT).** Shipped: `SurveyRepository` (insert-only, with
+> a transaction-scoped guard refusing anything but a normally-ended session — a crashed session's
+> rating would otherwise drag a qualified day below Phase 5's 3.0 threshold); `InterruptionRepository`
+> — the *only* writer of that table, whose API cannot express app identity (no `detail` parameter,
+> and `kind` validated as a bare token); one append-only `manual_pause` row per **completed** pause
+> (never insert-then-update, which would break the union-dedup sync strategy); a one-tap
+> `self_reported` distraction button with a live in-session count; survey wired through the dialog
+> (keyboard operable: digits 1–5, Enter, Escape, gated so a digit typed in the note can't overwrite
+> the rating); each Stats history row expands in place to its real survey + interruption log.
+> **Deferrals given owners in writing:** `idle_timeout` → Phase 3 (`N` still open), 90-day purge →
+> Phase 8, session-detail screen + survey backfill → Phase 5 (new deferred decision **D5**). The two
+> contradictory blockquotes in data-model §5.1/§5.2 (neutral-3.0, grace tokens) are deleted in favour
+> of locked decision 5. Spec: `docs/superpowers/specs/2026-07-26-phase-2-signal-design.md` (§7a is
+> the review table). Plan: `docs/superpowers/plans/2026-07-26-phase-2-signal.md`.
+>
+> **▶ DO THIS NEXT — manual verification, which is now the critical path.** masterplan §8: "a phase
+> is not done until its exit criteria have been run and their output seen", and "one phase in flight
+> at a time" — so **do not start Phase 3 until these are recorded here**:
+> 1. **Phase 2:** rate a real session at the keyboard (digits + Enter), skip another, tap the
+>    distraction button twice, then expand both rows in Stats.
+> 2. **Phase 1 (owed since `a42b180`):** crash-recovery kill test — pause first, since an *unpaused*
+>    kill recovers ~0s by design — and the one-hour wall-clock accuracy check (within 2s).
+> 3. **Shell slice (owed since `3df3bad`):** the §8 UX walkthrough of all seven views.
+>
+> Then **Phase 3 — Focused mode (Tier 1)**, which opens with a one-day spike on whether Focus Assist
+> can be enabled programmatically at all (masterplan R1). Phase 3 inherits: `idle_timeout` with `N`
+> still unfixed, deferred decision D2 (the ~10s interruption threshold, to be settled from the real
+> distribution this slice now collects), and `app_switch`/`exit_attempt` writes — which will be the
+> first code that legitimately needs `detail`, and must therefore widen the signature inside
+> `interruption_repository.dart` deliberately, in front of the privacy test.
+>
+> **Process notes — the two agent passes paid for themselves twice.** A 10-agent design pass ran
+> *before* implementation (4 research lenses → 3 competing designs → 3 judges) and caught a
+> duplicate-row bug plus two factually false failure-mode claims in the winning design **at plan
+> time**. A 24-agent adversarial review ran *after* implementation: 15 findings survived
+> verification, 5 refuted — and it found a second, subtler instance of the same bug class that my own
+> tests missed (`end()` cleared controller state only *after* awaiting the log, so End-then-Resume
+> and End-then-End each double-logged one pause). It also found that double-tapping **End session**
+> could unwind the shell and lose the survey, that identity could be smuggled through `kind`, that
+> the privacy scan was bypassable four ways (drift managers, companions, batches, raw SQL), and that
+> three assertions could not fail. Every fix was probed red. **Lesson to carry: tracing async
+> orderings by hand is not proof — write the mirror-ordering test.**
+> ---
+> ## ⏪ PREVIOUS (2026-07-26, "Modernist UI shell" session)
 >
 > **State:** `main`, clean, in sync with `origin`. Last commit `3df3bad` ("feat: Modernist UI
 > shell - walkable UX with stamped mocks (#4)", squash merge) on top of `a42b180` (phase-1
@@ -247,7 +297,8 @@ Phases (from `docs/masterplan.md` §7, as re-sliced):
   freeze guards (proven failable), backup, docs
 - **Phase 1 remainder — Core loop** — **DONE** (`a42b180`) — crash recovery, subject CRUD,
   immutability tests, wall-clock accuracy (code merged; manual exit checks a+b still owed)
-- **Phase 2 — The signal** — TODO — post-session survey + interruption log
+- **Phase 2 — The signal** — **CODE DONE** (`fb9da40`) — survey persistence + interruption log
+  (manual verification still owed before the phase is declared done)
 - **Phase 3 — Focused mode (Tier 1)** — TODO — fullscreen sessions, escapes detected and logged
 - **Phase 4 — Topics & mastery** — TODO
 - **Phase 5 — Consistency & insight** — TODO — strict streak, heatmap, analytics
@@ -258,6 +309,9 @@ Phases (from `docs/masterplan.md` §7, as re-sliced):
 
 ## ✅ Completed
 
+- **Phase 2 — the signal** (`fb9da40`, 2026-07-26) — full write-up in the LATEST block. Survey
+  persistence with a normally-ended guard, interruption log whose API cannot express app identity,
+  inline read-back in Stats. 81 tests; eight guards probed red; two agent passes (design + review).
 - **Modernist UI shell** (`3df3bad`, 2026-07-26) — full write-up in the LATEST block. Sidebar
   shell, seven views (real + stamped mocks), mode prompt, survey shell, session mode recorded.
   48 tests; Windows build verified.
@@ -286,10 +340,13 @@ Phases (from `docs/masterplan.md` §7, as re-sliced):
 
 ## 🔜 Future slices (ordered)
 
-1. **Isaac's manual checks** — the shell UX walkthrough (spec §8) plus the still-owed Phase-1
-   exit checks (crash-recovery kill test, one-hour wall-clock accuracy).
-2. **Phase 2 — the signal** — wire the already-built survey dialog to persistence + the
-   interruption log, then masterplan §7 Phase 3 onward.
+1. **Isaac's manual checks — now the critical path.** Phase 2's survey/distraction walkthrough, the
+   two owed Phase-1 exit checks (crash-recovery kill test, one-hour wall-clock accuracy), and the
+   shell UX walkthrough. Three phases' worth of exit criteria are queued behind a human at the
+   keyboard; nothing else should start until they are recorded.
+2. **Phase 3 — Focused mode (Tier 1)** — opens with the Focus Assist spike (R1); inherits
+   `idle_timeout` (`N` open), D2 (the ~10s threshold, now decidable from real data), and the first
+   legitimate `detail` write.
 
 **Backlog / deferred (non-blocking):** liveness heartbeat for unpaused-crash duration bound;
 `start()` double-tap orphan session (self-healing); README badge `TODO` (needs public repo); V1
@@ -373,3 +430,28 @@ New in the phase-1 session (verified this session):
 - **Async Riverpod notifier methods need post-await state rechecks** — two tap handlers can
   interleave across an `await`; re-check `identical(state, s)` (or the session id) before
   assigning, or a racing pause resurrects an ended session in the UI.
+
+New in the phase-2 session (verified this session):
+
+- **Clear state BEFORE the last await, not after.** Any window where a method is suspended while
+  `state` still describes the old situation is a window another handler will observe — this is how
+  one pause got logged twice. Corollary: **tracing async orderings by hand is not proof.** For every
+  race test, write the mirror ordering (A-then-B *and* B-then-A) — the bug lived in the one I hadn't.
+- **`tester.enterText` dispatches neither a pointer nor a key event** (it goes through the text-input
+  channel), so it cannot drive interaction counters or `Focus.onKeyEvent` handlers. Use
+  `tester.sendKeyEvent`.
+- **`LogicalKeyboardKey` overrides `==`, so it cannot key a `const` map** — use a `static final`.
+- **A `MockStamp`/`Container` stretches to its parent's width**, so it crashes with "BoxConstraints
+  forces an infinite width" inside a `Row`; bound it with a `ConstrainedBox`. Long labels in a `Row`
+  overflow the default 800×600 test surface — prefer `Wrap` for action/label rows.
+- **Never build a drift stream inside `build()`** on a widget with a ticker: a fresh subscription per
+  second. Hoist it into the `State`.
+- **`Navigator.pop` resolves its target with `lastWhere(isPresent)`**, so a *second* pop issued while
+  the first route is still `popping` takes the route BENEATH — a double-tapped "End session" unwound
+  the whole shell. Latch buttons that pop after an `await`.
+- **A source-scan guard must forbid *reaching* a table, not enumerate write syntaxes.** drift offers
+  generated managers, companions, aliases and batches, and `customStatement` SQL bypasses all of
+  them — and anchoring the SQL regex on `customStatement(` misses SQL held in a variable (probed).
+- **Watch the *other* free-text column.** The privacy line names `detail`, but `kind` was an
+  unvalidated `String`: `'app_switch:chrome.exe'` would have persisted a filename with every
+  `detail`-shaped guard green.
