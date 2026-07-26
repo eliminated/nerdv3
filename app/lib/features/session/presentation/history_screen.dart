@@ -27,7 +27,9 @@ class HistoryScreen extends ConsumerWidget {
                   final e = entries[i];
                   return ListTile(
                     title: Text(e.subjectName),
-                    subtitle: Text(e.startedAt.toLocal().toString()),
+                    subtitle: Text(e.endReason == 'crashed'
+                        ? '${e.startedAt.toLocal()} · crashed'
+                        : e.startedAt.toLocal().toString()),
                     trailing: Text(formatDuration(e.actualDuration)),
                   );
                 },
