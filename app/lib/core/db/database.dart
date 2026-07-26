@@ -28,6 +28,9 @@ class AppDatabase extends _$AppDatabase {
   MigrationStrategy get migration => MigrationStrategy(
         onCreate: (m) async => m.createAll(),
         beforeOpen: (details) async {
+          // foreign_keys is per-connection in SQLite. This holds for the
+          // single-connection executors used here; revisit if a read pool
+          // or multi-connection setup ever lands.
           await customStatement('PRAGMA foreign_keys = ON');
         },
       );

@@ -1,3 +1,8 @@
+// Drift's documented CHECK pattern references the column getter inside its
+// own definition, which trips this lint; the getters are built lazily and do
+// not actually recurse.
+// ignore_for_file: recursive_getters
+
 import 'package:drift/drift.dart';
 
 /// Sync + soft-delete columns carried by every table (data-model.md §2).
@@ -75,9 +80,15 @@ class Sessions extends Table with SyncColumns {
 
 class SessionSurveys extends Table with SyncColumns {
   TextColumn get sessionId => text().references(Sessions, #id).unique()();
-  IntColumn get focusRating => integer()();
-  IntColumn get comprehensionRating => integer().nullable()();
-  IntColumn get difficultyRating => integer().nullable()();
+  // CHECKs mirror data-model.md §3.5 and must land before the v1 freeze —
+  // SQLite cannot add a CHECK to an existing table without a rebuild.
+  IntColumn get focusRating =>
+      integer().check(focusRating.isBetweenValues(1, 5))();
+  IntColumn get comprehensionRating => integer()
+      .nullable()
+      .check(comprehensionRating.isBetweenValues(1, 5))();
+  IntColumn get difficultyRating =>
+      integer().nullable().check(difficultyRating.isBetweenValues(1, 5))();
   TextColumn get note => text().nullable()();
 
   @override
