@@ -287,11 +287,15 @@ enforcement is the daunting part, and this way the interruption log already exis
 Phase 3 starts writing to it.
 
 **Scope.** Post-session survey (`focus_rating` required 1–5; comprehension, difficulty and
-note optional); dismissible in one interaction, two for the common path; `manual_pause` and
-`idle_timeout` interruptions; a one-tap self-reported distraction button covering the phone
+note optional); dismissible in one interaction, two for the common path; `manual_pause`
+interruptions; a one-tap self-reported distraction button covering the phone
 blind spot (§9, R3), logged with a new `kind = 'self_reported'` — the column is `TEXT`, so
 this extends the enum in [data-model.md §3.6](./data-model.md#36-interruptions) with no
-migration; interruptions shown in session detail.
+migration; a session's survey and interruptions shown by expanding its history row.
+
+`idle_timeout` moved to Phase 3 (§10): its threshold `N` is specified nowhere, in-app-only
+detection would fire constantly for a student reading a PDF on another window, and the OS input
+APIs that could detect it honestly are Phase 3's surface.
 
 **Exit criteria.**
 - A widget test counts the common survey path at two interactions or fewer, and dismissal
@@ -314,7 +318,10 @@ time; exit friction (confirmation showing remaining time, logged as `exit_attemp
 `blocked = true`); suppression of the app's own notifications, plus Focus Assist state
 detection with a Settings deep link if programmatic control proves unavailable;
 `mode = 'focused'`; a watchdog that releases any restriction on next launch, per the
-fail-open rule in [focus-enforcement.md §2.3](./focus-enforcement.md#2-safety-rules).
+fail-open rule in [focus-enforcement.md §2.3](./focus-enforcement.md#2-safety-rules); and
+**`idle_timeout` interruptions, moved here from Phase 2** — this phase owns the OS input
+surface that can detect idleness honestly. `N` is still unfixed and must be chosen from real
+data alongside D2, not guessed.
 
 **Exit criteria.**
 - A written manual test checklist exists, has been executed, and passed
@@ -340,7 +347,14 @@ session re-tagging per decision 7 with a recompute.
 **Scope.** `daily_summaries` and `recomputeSummaries()`; `local_date` derived from the
 user's timezone and `day_start_hour`; the strict qualified-day rule (decision 5); the
 streak walk, where a not-yet-qualified today does **not** break the streak; calendar
-heatmap; time per subject and topic; weekly trend.
+heatmap; time per subject and topic; weekly trend. Also inherited from Phase 2: a proper
+**session-detail screen** (Phase 2 ships an inline expansion of a history row), and the
+survey-backfill decision **D5** — per-session drilldown belongs with analytics.
+
+**Binding constraint from Phase 2:** `avg_focus_rating` must be computed over surveyed
+sessions whose `end_reason` is `completed` or `user_ended`. A crashed session's duration is a
+lower-bound estimate, so letting one weight the average would drag a legitimately good day
+below the 3.0 threshold.
 
 **Exit criteria.**
 - Streak matches hand-computed fixtures, including the `day_start_hour` boundary — a
@@ -383,7 +397,12 @@ looping.
 
 **Scope.** CSV and JSON export across every table; backup and restore of the database
 file; delete-all with confirmation. This is the concrete form of the README's privacy
-commitment.
+commitment. Also **the 90-day interruption purge of locked decision 8**, which until now no
+phase owned: a hard `DELETE`, device-local, landing beside the backup/restore machinery that
+can prove a destructive path. Its cutoff must be an **injected** parameter
+(`purgeOlderThan(DateTime cutoff)`), never read from the wall clock inside the method — a
+clock skewed into the future would otherwise satisfy the predicate for every row — and the
+boundary is fixture-tested at 89 / 90 / 91 / 365 days.
 
 **Exit criteria.**
 - Export round-trips: re-importing the JSON reproduces row counts and per-table checksums
@@ -455,6 +474,7 @@ Rules:
 | **D2** | Whether an interruption needs a minimum duration threshold (~10s) to be logged, per [focus-enforcement.md §10](./focus-enforcement.md#10-open-questions) | Phase 3, informed by real data | Nothing |
 | **D3** | Ultra-Focus opt-in per subject | Post-finish | Nothing while Tier 1 is the ceiling |
 | **D4** | Whether the server is ever built at all | After Phase 9, from actual need | Nothing |
+| **D5** | **Survey backfill** — whether a session can be rated after the fact, and how a missed rating is recovered. Phase 2 ships insert-only with no relaunch prompt, so a skipped survey (or a process kill between End and Save) permanently costs that day under strict streaks. Any repair path must be bounded by a **duration** window, never a calendar day: writes go through `.toUtc()` while drift reads `DateTime` back as *local*, so a `.day` comparison would install a second, wrong definition of "today". | Phase 5, when `local_date` and `recomputeSummaries()` exist | Nothing — it is a recovery affordance, not a blocker |
 
 ## 10. Contradictions resolved
 
@@ -473,6 +493,10 @@ Rules:
 | data-model.md §3.1 | `users.email CITEXT UNIQUE NOT NULL`, `password_hash NOT NULL` | Local schema keeps both NOT NULL, seeded with sentinels (`local@device.invalid`, `''`) for the single local user (decision 4). `email` is `TEXT UNIQUE` (case-sensitive) — SQLite has no CITEXT; decide `COLLATE NOCASE` vs app-layer dedup when auth work nears (post-finish). |
 | data-model.md §3.4 note | "Only `ended_at`, `actual_duration_s`, `end_reason` are ever written after creation" | Reworded (harden slice): pause bookkeeping writes `paused_duration_s`/`updated_at` while in progress; the invariant is **immutable once ended**. |
 | data-model.md §3.5 | `CHECK (rating BETWEEN 1 AND 5)` on the three survey ratings | Present in schema v1 — added before the freeze after the slice-1 review caught their omission from the implementation plan (SQLite cannot add a CHECK later without a table rebuild). |
+| §7 Phase 1 | "history list and **session detail**" | Phase 1's exit criteria never covered session detail, so it shipped without it. Phase 2 satisfies its own scope line with an **inline expansion** of a history row (information, not a destination); the real screen is assigned to Phase 5 above. Recorded rather than silently absorbed. |
+| §7 Phase 2 | `idle_timeout` interruptions in Phase 2 | **Deferred to Phase 3.** `N` is unspecified in every document, and the only detection available to a Phase 2 app is in-app input — which reads a student reading a PDF in another window as idle, poisoning the very dataset D2 is meant to be decided from. |
+| focus-enforcement.md §7 | "Every **enforcement** event writes an `interruptions` row" | Reworded to cover session events in all modes. Focused mode does not exist until Phase 3, so under the enforcement-only reading Phase 2's exit criterion 2 would be unsatisfiable; §7's own cross-mode comparison also needs a plain-mode baseline. |
+| data-model.md §3.5 | Silent on survey mutability | **Insert-only in Phase 2**, and two one-way doors recorded in §3.5: drift's upsert conflict target defaults to the primary key (so an upsert can never fire on `session_id`), and the column-level UNIQUE index counts tombstones (so a soft-deleted survey would permanently block re-rating). Editing arrives with D5, if at all. |
 
 ## 11. Related documents
 
@@ -486,3 +510,4 @@ Rules:
 | ------- | ------- | ---------------- |
 | 1.0 | Initial masterplan — V1 post-mortem, locked decisions, migration law, routines entity, phases 0–9, risks | Claude, Isaac |
 | 1.1 | §10: recorded slice-1 schema deviations (goal_id deferral, sentinel user fields, CITEXT, §3.4 wording, CHECKs) — harden slice | Claude, Isaac |
+| 1.2 | Phase 2 design pass: `idle_timeout` → Phase 3, session-detail screen + D5 → Phase 5, decision 8's 90-day purge → Phase 8 (previously owned by no phase); §9 gains D5; §10 gains four rows; Phase 5 gains the `end_reason` constraint on `avg_focus_rating` | Claude, Isaac |

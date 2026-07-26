@@ -144,7 +144,7 @@ Study data is overwhelmingly append-only and single-user, so conflicts are rare 
 | Entity | Strategy | Reason |
 |---|---|---|
 | `sessions` | **Never conflict** — immutable once ended | A completed session is a historical fact |
-| `interruptions` | **Union, deduped by id** | Append-only event log |
+| `interruptions` | **Union, deduped by id** | Append-only event log — rows are written once, complete, and never updated. This is what makes dedup-by-id well-defined; a mutable `duration_s` would leave two peers holding different values under one id with no tiebreak. **The union must also be bounded by the 90-day retention window** (decision 8), or rows purged on one device resurrect from another. |
 | Everything else | Last-write-wins | User-editable, low contention |
 
 > If multi-user study groups arrive post-1.0, revisit this. LWW is wrong for shared data.

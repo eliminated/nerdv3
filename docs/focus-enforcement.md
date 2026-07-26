@@ -162,17 +162,25 @@ remaining" — is nearly as effective as blocking and carries none of the risk.
 
 ## 7. Interruption logging
 
-Every enforcement event writes an `interruptions` row (see
-[data-model.md §3.6](./data-model.md#36-interruptions)):
+Every **session** event — not only enforcement events — writes an `interruptions` row (see
+[data-model.md §3.6](./data-model.md#36-interruptions)). This wording matters: focused mode does
+not exist until Phase 3, and the log is logged in **all modes** so that the cross-mode comparison
+below has a plain-mode baseline to compare against.
 
-| Event | `kind` | `blocked` |
-|---|---|---|
-| User switched away | `app_switch` | `false` |
-| Exit attempt refused | `exit_attempt` | `true` |
-| Notification suppressed | `notification` | `true` |
-| User paused | `manual_pause` | `false` |
-| No input for N minutes | `idle_timeout` | `false` |
-| Screen locked | `device_locked` | `false` |
+| Event | `kind` | `blocked` | Ships |
+|---|---|---|---|
+| User switched away | `app_switch` | `false` | Phase 3 |
+| Exit attempt refused | `exit_attempt` | `true` | Phase 3 |
+| Notification suppressed | `notification` | `true` | Phase 3 |
+| User paused | `manual_pause` | `false` | **Phase 2** |
+| User reported being distracted | `self_reported` | `false` | **Phase 2** |
+| No input for N minutes | `idle_timeout` | `false` | Phase 3 — `N` still unfixed, to be chosen from real data alongside D2 |
+| Screen locked | `device_locked` | `false` | Phase 3 |
+
+`self_reported` carries no `duration_s` and no `detail`: one tap, no chooser, no free text. A
+picker would cost a second interaction and invite the user to name an app, which is exactly the
+identity the privacy line below forbids. Free-form reflection belongs in `session_surveys.note`,
+which the privacy line does not govern.
 
 **Log the kind, never the identity.** Record that an app switch happened, not which app was
 opened. Reading which apps a student uses is surveillance, would obstruct any future
