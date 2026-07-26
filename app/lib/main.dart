@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/db/database.dart';
 import 'core/db/local_user.dart';
 import 'core/providers.dart';
+import 'features/session/data/session_repository.dart';
 import 'features/subjects/presentation/subject_list_screen.dart';
 
 Future<void> main() async {
@@ -11,6 +12,9 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final db = AppDatabase(openConnection());
   await ensureLocalUser(db);
+  // Reconcile on resume (architecture.md §3.4): close out anything a crash
+  // left open before any UI can touch it.
+  await SessionRepository(db).recoverCrashedSessions();
   runApp(ProviderScope(
     overrides: [databaseProvider.overrideWithValue(db)],
     child: const NerdyApp(),

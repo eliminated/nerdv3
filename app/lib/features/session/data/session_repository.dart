@@ -10,12 +10,14 @@ class HistoryEntry {
     required this.subjectName,
     required this.startedAt,
     required this.actualDuration,
+    this.endReason,
   });
 
   final String sessionId;
   final String subjectName;
   final DateTime startedAt;
   final Duration actualDuration;
+  final String? endReason;
 }
 
 class SessionRepository {
@@ -65,6 +67,32 @@ class SessionRepository {
     );
   }
 
+  /// Closes out sessions left open by a crash (architecture.md §3.4).
+  /// ended_at is the row's last persisted write — an honest lower bound —
+  /// and end_reason 'crashed' is the key streak inputs will exclude on.
+  /// Returns the number of sessions recovered.
+  Future<int> recoverCrashedSessions() async {
+    return _db.transaction(() async {
+      final open = await (_db.select(_db.sessions)
+            ..where((t) => t.endedAt.isNull()))
+          .get();
+      for (final row in open) {
+        final active = row.updatedAt.difference(row.startedAt).inSeconds -
+            row.pausedDurationS;
+        await (_db.update(_db.sessions)..where((t) => t.id.equals(row.id)))
+            .write(
+          SessionsCompanion(
+            endedAt: Value(row.updatedAt),
+            actualDurationS: Value(active < 0 ? 0 : active),
+            endReason: const Value('crashed'),
+            updatedAt: Value(DateTime.now().toUtc()),
+          ),
+        );
+      }
+      return open.length;
+    });
+  }
+
   Stream<List<HistoryEntry>> watchHistory() {
     final query = _db.select(_db.sessions).join([
       innerJoin(
@@ -81,6 +109,7 @@ class SessionRepository {
             subjectName: subject.name,
             startedAt: session.startedAt,
             actualDuration: Duration(seconds: session.actualDurationS ?? 0),
+            endReason: session.endReason,
           );
         }).toList());
   }
