@@ -34,7 +34,10 @@ class SessionRepository {
   }
 
   Future<void> updatePausedDuration(String id, Duration totalPaused) async {
-    await (_db.update(_db.sessions)..where((t) => t.id.equals(id))).write(
+    // Guarded: an ended session is immutable (data-model.md §3.4).
+    await (_db.update(_db.sessions)
+          ..where((t) => t.id.equals(id) & t.endedAt.isNull()))
+        .write(
       SessionsCompanion(
         pausedDurationS: Value(totalPaused.inSeconds),
         updatedAt: Value(DateTime.now().toUtc()),
@@ -48,7 +51,10 @@ class SessionRepository {
     required Duration actualDuration,
     required Duration totalPaused,
   }) async {
-    await (_db.update(_db.sessions)..where((t) => t.id.equals(id))).write(
+    // Guarded: ending is a one-shot closing write (data-model.md §3.4).
+    await (_db.update(_db.sessions)
+          ..where((t) => t.id.equals(id) & t.endedAt.isNull()))
+        .write(
       SessionsCompanion(
         endedAt: Value(endedAt),
         actualDurationS: Value(actualDuration.inSeconds),

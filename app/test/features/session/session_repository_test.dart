@@ -73,4 +73,31 @@ void main() {
     expect(history.first.subjectName, 'Physics');
     expect(history.first.actualDuration, const Duration(minutes: 25));
   });
+
+  test('an ended session is immutable through every repository write path',
+      () async {
+    final s = start()
+        .pause(t0.add(const Duration(minutes: 10)))
+        .resume(t0.add(const Duration(minutes: 12)));
+    await repo.insertStartedSession(s);
+    final endAt = t0.add(const Duration(minutes: 30));
+    await repo.endSession(
+      id: s.id,
+      endedAt: endAt,
+      actualDuration: s.elapsed(endAt),
+      totalPaused: s.totalPaused(endAt),
+    );
+    final before = await db.select(db.sessions).getSingle();
+
+    await repo.updatePausedDuration(s.id, const Duration(hours: 9));
+    await repo.endSession(
+      id: s.id,
+      endedAt: endAt.add(const Duration(hours: 1)),
+      actualDuration: const Duration(hours: 9),
+      totalPaused: const Duration(hours: 9),
+    );
+
+    // Drift data classes implement ==; this compares every column.
+    expect(await db.select(db.sessions).getSingle(), before);
+  });
 }
