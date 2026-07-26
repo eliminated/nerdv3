@@ -12,3 +12,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions are r
 - Single local-user bootstrap (fixed UUIDv7, race-safe).
 - Subjects: create and list.
 - Study sessions: start, pause/resume, end — elapsed time computed from timestamps, persisted, with a session history list.
+- CI on `windows-latest`: analyze, tests, and schema guards on every push.
+- Schema-v1 verification harness (drift schema snapshot + verifier test with dropped-entity detection) and a CI dump-drift guard, both demonstrated able to fail.
+- One-button database backup (`VACUUM INTO`) with a save-location picker.
+- MIT license, CONTRIBUTING.md, and a masterplan-aligned README roadmap.

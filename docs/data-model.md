@@ -155,8 +155,13 @@ Notes:
 - `end_reason = 'crashed'` is written by the recovery routine on next launch when an
   unterminated session is found. Crashed sessions **do not count** toward streaks — they
   cannot be trusted — but they are kept, because a pattern of crashes is a bug report.
-- Only `ended_at`, `actual_duration_s`, and `end_reason` are ever written after creation.
-  Nothing else mutates.
+- While a session is **in progress**, `paused_duration_s` and `updated_at` may be updated
+  (pause bookkeeping). The real invariant is **immutable once ended**: after `ended_at` is
+  set, no field changes except the closing writes themselves (`ended_at`,
+  `actual_duration_s`, `end_reason`) — and the decision-7 exception
+  (`subject_id`/`topic_id` re-tagging followed by `recomputeSummaries()`).
+  (Wording corrected in the V3 harden slice; the old text claimed nothing but the three
+  closing fields was ever written after creation, which pause bookkeeping contradicts.)
 
 ### 3.5 `session_surveys`
 

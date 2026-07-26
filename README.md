@@ -97,7 +97,7 @@ Legend: ✅ Shipped · 🔨 In progress · 📋 Planned · 💡 Idea
 
 | Feature | Description | Status |
 |---|---|---|
-| **Session timer** | The core loop: pick a subject, start a session, log the work. | 📋 Planned |
+| **Session timer** | The core loop: pick a subject, start a session, log the work. | ✅ Shipped (start/pause/end + history; crash recovery 🔨) |
 | **Focused mode** | Light-touch session mode — suppresses notifications and reduces on-screen distraction. | 📋 Planned |
 | **Ultra-Focus mode** | Hard lockdown. Blocks app switching and exit attempts, suppresses all notifications, and keeps you inside the app with built-in companion tools. See [platform reality](#focus-enforcement--platform-reality). | 📋 Planned |
 | **Post-session survey** | Short check-in after each session rating focus quality and difficulty. Feeds streak quality and topic evaluation — this is the app's core signal, not a side feature. | 📋 Planned |
@@ -121,20 +121,18 @@ Legend: ✅ Shipped · 🔨 In progress · 📋 Planned · 💡 Idea
 
 ## Tech stack
 
-<!-- TODO: confirm. These are recommendations based on the cross-platform +
-     OS-level-blocking requirement, not final decisions. -->
+Decided in [docs/masterplan.md](docs/masterplan.md) §3 (locked decisions 1–3): the client is
+Flutter, the device is the only datastore until after v1.0, and no server exists on the
+critical path.
 
 | Layer | Technology | Why |
 |---|---|---|
-| Client | Flutter (Dart) | One codebase for Android and desktop; platform channels give a clean path down to native code for lockdown features. |
-| Native modules | Kotlin (Android), C++/Win32 (Windows) | Required for Ultra-Focus enforcement. |
-| Backend | FastAPI (Python) | Fast to build, good async story, straightforward REST. |
-| Database | PostgreSQL | Relational fits the subject → topic → session → survey model well. |
-| Local storage | SQLite (Drift) | Offline-first source of truth on device. |
-| Platforms | Android, Windows | Desktop-first for study sessions, mobile for tracking and review. |
-
-> **Decide this before writing feature code.** The Ultra-Focus requirement constrains the client
-> framework more than any other feature, so choosing the stack around it avoids a rewrite later.
+| Client | Flutter (Dart) | One codebase for Windows and (post-1.0) Android; platform channels give a clean path down to native code for lockdown features. |
+| State / DI | Riverpod | Long-running timer surviving screen changes — the core of the app. |
+| Local storage | SQLite (Drift, pinned 2.34.0) | Offline-first source of truth on device. Schema v1 is frozen; migrations are additive-only. |
+| Native modules | C++/Win32 (Windows); Kotlin (Android, post-1.0) | Required for focus enforcement. |
+| Backend (post-1.0, optional) | FastAPI + PostgreSQL | Deferred until after the finish line; sync/auth are not v1.0 features. |
+| Platforms | Windows first; Android post-1.0 | Desktop-first for study sessions. |
 
 ## Focus enforcement — platform reality
 
@@ -235,48 +233,30 @@ Feature-first folders inside `lib/` matter more than the layer names — they ke
 
 ## Roadmap
 
-Release versions below are the shipped-software clock, all within build iteration V3.
+The governing sequencing document is [docs/masterplan.md](docs/masterplan.md) §7 — this list
+mirrors it and supersedes earlier README roadmaps (notably: **no authentication and no server
+before v1.0**, per masterplan decision 3). Delivery is slice-based: every merge ends in a
+runnable, usable app.
 
-**v0.1.0 — Foundation**
-- [ ] Project scaffold (client + server)
-- [ ] Database schema and migrations
-- [ ] Authentication
-- [ ] CI pipeline (lint + test on push)
+- [x] **Slice 1 — usable study session**: scaffold, frozen schema v1, subjects, session timer
+      with pause/resume, persistence, history
+- [x] **Harden slice**: CI on `windows-latest`, schema verification harness + drift guards
+      (proven able to fail), one-button database backup, project docs
+- [ ] **Phase 1 — Core loop remainder**: crash recovery (`end_reason='crashed'`), full subject
+      CRUD, session-immutability tests, wall-clock accuracy check
+- [ ] **Phase 2 — The signal**: post-session survey (≤2 taps), interruption log
+- [ ] **Phase 3 — Focused mode (Tier 1, Windows)**: fullscreen sessions, escapes detected,
+      logged, and gently frictioned
+- [ ] **Phase 4 — Topics & mastery**: topic tree, session tagging, computed mastery
+- [ ] **Phase 5 — Consistency & insight**: strict quality-weighted streaks, calendar heatmap,
+      analytics
+- [ ] **Phase 6 — Goals & routines**: recurring schedule with derived adherence
+- [ ] **Phase 7 — Companion tools**: notepad, parking list, ambient sound
+- [ ] **Phase 8 — Export & durability**: CSV/JSON export, backup/restore, delete-all
+- [ ] **Phase 9 — Finish**: onboarding, polish, Windows installer, `v1.0.0`
 
-**v0.2.0 — Core loop**
-- [ ] Subject creation
-- [ ] Session timer
-- [ ] Session logging and history
-
-**v0.3.0 — Focused mode**
-- [ ] Soft distraction reduction
-- [ ] Post-session survey
-- [ ] Interruption log
-
-**v0.4.0 — Consistency**
-- [ ] Streak tracking (quality-weighted)
-- [ ] Topics & subtopics planner
-- [ ] Goal setting
-
-**v0.5.0 — Insight**
-- [ ] Analytics dashboard
-- [ ] Weekly summary
-- [ ] Data export
-
-**v0.6.0 — Ultra-Focus**
-- [ ] Android screen pinning
-- [ ] In-app editor, notepad, music
-- [ ] Windows enforcement module
-
-**v1.0.0 — Public release**
-- [ ] Onboarding flow
-- [ ] Polish pass
-- [ ] Store listing
-
-**Post-1.0**
-- [ ] Spaced repetition
-- [ ] External course tracking
-- [ ] Accountability / social features
+**Post-1.0:** Android port (screen pinning, DND), server & sync, Ultra-Focus hard lockdown,
+spaced repetition, external course tracking, accountability/social.
 
 ## Development workflow
 
@@ -300,17 +280,15 @@ NerdyApp observes notification state and app-switching behaviour to make focus m
 
 ## Contributing
 
-Contributions are welcome. Please open an issue before starting significant work so the approach can be agreed first.
-
-<!-- TODO: add CONTRIBUTING.md covering code style, branch naming, and PR process -->
+Contributions are welcome. Please open an issue before starting significant work so the approach can be agreed first. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, hard rules (the drift pin, the schema freeze), and the PR process.
 
 ## License
 
-<!-- TODO: choose one. MIT is the usual default for a project like this. -->
+[MIT](LICENSE) — Copyright (c) 2026 Nicholas Jonathan Isaac.
 
 ## Contact
 
-**Maintainer:** <!-- TODO: name -->
+**Maintainer:** Nicholas Jonathan Isaac ([@eliminated](https://github.com/eliminated))
 **Email:** problemistergrey@gmail.com
 **Issues:** [Issues](https://github.com/eliminated/nerdv3/issues)
 
@@ -325,4 +303,5 @@ Contributions are welcome. Please open an issue before starting significant work
 | 1.0 | - Foundation | Claude\nIsaac |
 | 1.1 | - Build iteration V2 → V3 after a from-scratch restart<br>- Filled the iteration-history table, including an honest V1 and V2 post-mortem<br>- Repointed issues link to the nerdv3 repository | Claude\nIsaac |
 | 1.2 | -Truer statement | Isaac |
+| 1.3 | - Roadmap rewritten to mirror masterplan §7 (slice-based; auth/server moved post-1.0)<br>- Tech stack marked decided per masterplan §3; Riverpod/Drift pins recorded<br>- Session timer marked shipped (slice 1)<br>- License (MIT), CONTRIBUTING link, maintainer filled in | Claude\nIsaac |
 
