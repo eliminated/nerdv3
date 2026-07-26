@@ -39,7 +39,7 @@ void main() {
   late String subjectId;
 
   Future<void> pumpFlowToSurvey(WidgetTester tester,
-      {bool endSession = true}) async {
+      {bool endSession = true, InteractionCounter? attachBeforeEnd}) async {
     // The launcher is PUSHED, not the root route: Flutter refuses to pop a root
     // route, which would make a stray second pop unobservable and the
     // double-tap test unfailable.
@@ -70,6 +70,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     if (!endSession) return;
+    attachBeforeEnd?.attach();
     await tester.tap(find.text('End session'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
@@ -87,18 +88,18 @@ void main() {
   });
   tearDown(() => db.close());
 
-  testWidgets('ending a session opens the survey with no further interaction',
+  testWidgets('the survey opens on the End tap itself, costing nothing extra',
       (tester) async {
     final counter = InteractionCounter();
     addTearDown(counter.detach);
-    await pumpFlowToSurvey(tester);
-    counter.attach(); // window opens once the dialog is up
-    await tester.pump();
+    // Attached BEFORE the End tap: counting from after it would make the
+    // assertion trivially zero. This pins the LEFT EDGE of the budget window —
+    // without it, a required interaction could be pushed outside the window
+    // (e.g. a "rate this session" prompt the user has to click first).
+    await pumpFlowToSurvey(tester, attachBeforeEnd: counter);
 
     expect(find.byType(SurveyDialog), findsOneWidget);
-    // Pins the LEFT EDGE of the counting window: without this, the two-tap
-    // budget could be met by pushing a required tap outside the window.
-    expect(counter.count, 0);
+    expect(counter.count, 1, reason: 'the End tap and nothing more');
     await unmount(tester);
   });
 
@@ -136,6 +137,11 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
 
+    // skipOffstage: false so this observes the dialog UNMOUNTED, not merely
+    // hidden — a "really skip?" confirmation would leave it in the tree and
+    // make dismissal cost two interactions while every other assert stayed green.
+    expect(find.byType(SurveyDialog, skipOffstage: false), findsNothing,
+        reason: 'one interaction must actually dismiss it');
     expect(counter.count, 1);
     // The only thing standing between strict streaks and a neutral-3.0
     // sentinel row that would quietly qualify every day.
@@ -179,6 +185,30 @@ void main() {
           ..where((t) => t.id.isNotValue(decoy.id)))
         .getSingle();
     expect(s.sessionId, flowSession.id);
+    await unmount(tester);
+  });
+
+  testWidgets('a rating must be chosen explicitly: Save does nothing without one',
+      (tester) async {
+    await pumpFlowToSurvey(tester);
+    // Nothing rated yet.
+    await tester.tap(find.text('Save'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(find.byType(SurveyDialog, skipOffstage: false), findsOneWidget,
+        reason: 'Save must be inert until the mandatory rating is chosen');
+    expect(await db.select(db.sessionSurveys).get(), isEmpty,
+        reason: 'a defaulted focus_rating would write neutral sentinel rows, '
+            'quietly qualifying days the user never rated');
+
+    // And it works the moment a rating exists.
+    await tester.tap(find.byKey(const Key('focus-1')));
+    await tester.pump();
+    await tester.tap(find.text('Save'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect((await db.select(db.sessionSurveys).getSingle()).focusRating, 1);
     await unmount(tester);
   });
 

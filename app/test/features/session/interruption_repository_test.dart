@@ -82,6 +82,40 @@ void main() {
     expect((await db.select(db.interruptions).getSingle()).blocked, isTrue);
   });
 
+  test('kind cannot carry app identity, only a bare token', () async {
+    // The privacy line covers `detail`, but `kind` is the other free-text
+    // column on this path: 'app_switch:chrome.exe' would be surveillance that
+    // no `detail`-shaped guard could see.
+    for (final smuggled in [
+      'app_switch:chrome.exe',
+      'Discord',
+      'app switch',
+      'app-switch',
+      'notification(Slack)',
+    ]) {
+      await expectLater(
+          repo.logSessionEvent(
+              sessionId: sessionId, kind: smuggled, occurredAt: t0),
+          throwsArgumentError,
+          reason: '"$smuggled" must be refused');
+    }
+    expect(await db.select(db.interruptions).get(), isEmpty);
+    // Every documented kind still passes.
+    for (final kind in [
+      'manual_pause',
+      'self_reported',
+      'app_switch',
+      'exit_attempt',
+      'notification',
+      'idle_timeout',
+      'device_locked',
+    ]) {
+      await repo.logSessionEvent(
+          sessionId: sessionId, kind: kind, occurredAt: t0);
+    }
+    expect(await db.select(db.interruptions).get(), hasLength(7));
+  });
+
   test("watchSelfReportCount counts only this session's self reports",
       () async {
     expect(await repo.watchSelfReportCount(sessionId).first, 0);

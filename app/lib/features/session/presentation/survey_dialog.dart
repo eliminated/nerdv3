@@ -82,9 +82,13 @@ class _SurveyDialogState extends State<SurveyDialog> {
   /// events still reach ancestor handlers while a text field is being typed in,
   /// so an ungated handler would let a '4' typed into the note silently set the
   /// mandatory rating.
-  KeyEventResult _onKey(FocusNode _, KeyEvent event) {
+  KeyEventResult _onKey(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
     if (_noteFocus.hasFocus) return KeyEventResult.ignored;
+    // Only act when no descendant control holds focus: otherwise Enter would
+    // both activate the focused button (Skip) and run the shortcut here, so a
+    // deliberate skip could save instead.
+    if (!node.hasPrimaryFocus) return KeyEventResult.ignored;
     final digit = _digitKeys[event.logicalKey];
     if (digit != null) {
       setState(() => _focus = digit);

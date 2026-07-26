@@ -107,6 +107,32 @@ void main() {
         reason: 'one pause is one event, however the two calls interleave');
   });
 
+  test('an end racing a resume logs exactly one manual_pause', () async {
+    final c = container.read(sessionControllerProvider.notifier);
+    await c.start(subjectId);
+    await c.togglePause(); // pause, awaited
+    // The MIRROR of the test above: end is enqueued first, so its own log runs
+    // last. If end() cleared state only after awaiting that log, the racing
+    // resume would still see a paused session and log the pause a second time.
+    final ending = c.end();
+    final resuming = c.togglePause();
+    await Future.wait([ending, resuming]);
+
+    expect(await db.select(db.interruptions).get(), hasLength(1));
+  });
+
+  test('two ends racing while paused log exactly one manual_pause', () async {
+    final c = container.read(sessionControllerProvider.notifier);
+    await c.start(subjectId);
+    await c.togglePause(); // pause, awaited
+    final first = c.end();
+    final second = c.end(); // double-click / key autorepeat
+    await Future.wait([first, second]);
+
+    expect(await db.select(db.interruptions).get(), hasLength(1));
+    expect(container.read(sessionControllerProvider), isNull);
+  });
+
   test('a pause that lost the race to end() logs nothing', () async {
     final c = container.read(sessionControllerProvider.notifier);
     await c.start(subjectId);

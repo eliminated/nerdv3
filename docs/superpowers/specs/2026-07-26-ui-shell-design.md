@@ -93,7 +93,7 @@ region is wrapped by the stamp widget (`MockStamp(label: 'PLANNED · PHASE 5')`)
 
 | View | Real | Mock (stamped) |
 |---|---|---|
-| Today | date header; "Start a session" card (subject picker → mode prompt); active-subjects count | streak/week/XP stat strip; "up next" schedule card; rest-of-today list; badges; muted apps |
+| Today | date header; "Start a session" card (subject picker → mode prompt); active-subjects count | streak/week/XP stat strip; "up next" schedule card; rest-of-today list; badges; held-back panel (*renamed from "muted apps" in Phase 2 and made identity-free — per-app counts would advertise exactly what the privacy line forbids; see U9*) |
 | Subjects | card grid from `watchSubjects` (name, colour swatch, source line, edit/archive/delete via dialog + menu); archived table with real Restore; "+ Add a subject" cell | per-subject level tag; weekly-target progress bar; topics chips; derived 3-letter code |
 | Schedule | — | entire week grid, headers, session blocks |
 | Stats & Streaks | "Recent sessions" table = real `watchHistory` (duration, started, `· crashed` marker); *since Phase 2:* each row expands to its real survey and interruption log | stat strip, 14-day chart, split-by-subject (no emergency-exit log was built — that row of this table was aspirational) |

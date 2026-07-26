@@ -43,6 +43,14 @@ class InterruptionRepository {
     int? durationS,
     bool blocked = false,
   }) async {
+    // focus-enforcement.md §7's vocabulary is bare tokens. Without this, the
+    // discriminator itself could smuggle identity ('app_switch:chrome.exe') —
+    // the one free-text column left on this write path. A thrown error, not an
+    // assert: asserts are stripped in release builds.
+    if (!RegExp(r'^[a-z_]+$').hasMatch(kind)) {
+      throw ArgumentError.value(kind, 'kind',
+          'must be a bare token — the log records the kind, never the identity');
+    }
     await _db.into(_db.interruptions).insert(InterruptionsCompanion.insert(
           id: newId(),
           sessionId: sessionId,

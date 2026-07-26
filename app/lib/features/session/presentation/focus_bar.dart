@@ -33,6 +33,13 @@ class _FocusBarScreenState extends ConsumerState<FocusBarScreen> {
   /// fresh drift stream per rebuild would leak a subscription each time.
   Stream<int>? _selfReports;
 
+  /// A second activation inside end()'s await window would issue a second pop —
+  /// and once the first pop has run, `Navigator.pop` resolves its target with
+  /// `lastWhere(isPresent)`, so the second one takes the route BENEATH this
+  /// screen, unwinding the shell and losing the survey. Reachable by a fast
+  /// double-click or by Enter autorepeat while the button holds focus.
+  bool _ending = false;
+
   @override
   void initState() {
     super.initState();
@@ -131,14 +138,17 @@ class _FocusBarScreenState extends ConsumerState<FocusBarScreen> {
                               Text(session.isPaused ? 'Resume' : 'Pause'),
                         ),
                         FilledButton(
-                          onPressed: () async {
-                            await ref
-                                .read(sessionControllerProvider.notifier)
-                                .end();
-                            if (context.mounted) {
-                              Navigator.of(context).pop();
-                            }
-                          },
+                          onPressed: _ending
+                              ? null
+                              : () async {
+                                  setState(() => _ending = true);
+                                  await ref
+                                      .read(sessionControllerProvider.notifier)
+                                      .end();
+                                  if (context.mounted) {
+                                    Navigator.of(context).pop();
+                                  }
+                                },
                           child: const Text('End session'),
                         ),
                         // One tap, no chooser and no free text: the log records

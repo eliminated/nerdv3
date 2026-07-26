@@ -62,18 +62,23 @@ if (s.isPaused) {                   // s was paused => this was a RESUME => the 
       .logPause(sessionId: s.id, pauseStartedAt: s.pauseStartedAt!, resumedAt: now);
 }
 
-// end(): decide from LIVE state read after the await, never the pre-await snapshot.
+// end(): decide from LIVE state read after the await, never the pre-await
+// snapshot — and clear state BEFORE awaiting the log.
 await ref.read(sessionRepositoryProvider).endSession(...);
 final live = state;
 if (live == null || live.id != s.id) return;
+state = null;
 if (live.isPaused) {
   await ref.read(interruptionRepositoryProvider)
       .logPause(sessionId: s.id, pauseStartedAt: live.pauseStartedAt!, resumedAt: now);
 }
-state = null;
 ```
 
-Every ordering now yields exactly one row: resume-wins → resume logs, `end()` sees live state running and skips; end-wins → `end()` logs, the racing resume returns early at its identity guard; pause-racing-end (the existing race test, where `end()` is enqueued first and resolves first) → `end()` sees live state *running* and logs nothing, the pause returns early: **zero rows**, which is correct for a pause that never took effect.
+**The `state = null` placement is load-bearing, and this spec's first draft got it wrong — caught by the post-implementation adversarial review, not by the tests.** With the clear *after* the log await, `end()` stays suspended inside the insert while `state` still holds the paused session, so a racing Resume (End enqueued first) or a second End reaches its own post-await continuation, sees a paused session, and logs the same pause again: **two rows for one pause**, in the very case the original text claimed was safe. It also wedged the controller on a throwing insert, since `state = null` would never run. Both orderings are now covered (`an end racing a resume…`, `two ends racing while paused…`), and the original claim of exhaustiveness is a reminder that tracing orderings by hand is not proof.
+
+With the clear hoisted, every ordering yields exactly one row: resume-wins → resume logs, `end()` sees live state running and skips; end-wins → `end()` clears, then logs, and the racing resume returns early at its identity guard; second End → returns at `live == null`; pause-racing-end (the existing race test, where `end()` is enqueued first and resolves first) → `end()` sees live state *running* and logs nothing, the pause returns early: **zero rows**, which is correct for a pause that never took effect.
+
+The same hazard exists one layer up in the UI: two activations of **End session** (fast double-click, or Enter autorepeat while the button holds focus) both pass `end()`'s entry check, and the second `Navigator.pop` — resolved with `lastWhere(isPresent)` once the first pop is already `popping` — takes the route *beneath* the focus bar, unwinding the shell and losing the survey entirely. `FocusBarScreen` therefore latches the button (`_ending`).
 
 Not transactional with the sessions write: a failing insert leaves the session correctly ended with a missing log row — the same already-accepted outcome as a crash — whereas wrapping it means editing a correctness-critical guarded path for a strictly lesser failure mode. Accepted and documented: a process kill *while paused* logs no row at all (that session closes `crashed` and data-model.md:283 excludes it from qualification, so its log has no consumer).
 
@@ -98,7 +103,8 @@ focus-enforcement.md:165 currently opens "Every enforcement event writes an `int
 `expect(row.detail, isNull)` is a tautology: Phase 2 has no window-title source, so it passes on code that *could not* leak identity and never executes the Phase 3 `app_switch` writer that actually risks the violation — masterplan.md:66 names this exact class as V2's most expensive lesson. Instead:
 
 - No `detail` parameter anywhere in `InterruptionRepository`'s API, so Phase 3's first identity write must be a deliberate signature widening inside a privacy-named file.
-- `app/test/core/db/write_confinement_test.dart` asserts (i) no file under `lib/` except `interruption_repository.dart` **writes** the table (regex matches `InterruptionsCompanion` and `into|update|delete(_db.interruptions` — writes only, so the Stats reader's `select` stays legal), (ii) the text of `interruption_repository.dart` never contains `detail`, (iii) an anti-vacuity floor on files scanned. **The floor is `> 20`, not `> 40`: `app/lib` contains 27 `.dart` files (26 after skipping `*.g.dart`), so `> 40` would be red on day one for the wrong reason and the fastest "fix" would be deleting the assertion.** The scan must be **seen red once** by temporarily adding an offending insert, per the standing rule.
+- **`kind` is validated as a bare token** (`^[a-z_]+$`, thrown not asserted). The review found that without this, identity could be smuggled through the *discriminator* instead — `logSessionEvent(kind: 'app_switch:chrome.exe')` would persist a filename while every `detail`-shaped guard stayed green. All seven documented kinds pass.
+- `app/test/core/db/write_confinement_test.dart` asserts (i) no file under `lib/` **reaches** the table except the owner (write) and one exact-path reader (`session_repository.dart`), (ii) the text of `interruption_repository.dart` never contains `detail`, (iii) an anti-vacuity floor on files scanned. **The review found the original write-syntax regex bypassable** — generated drift managers (`db.managers.interruptions.create`), companions built elsewhere, batched writes, and raw `customStatement` SQL all evaded it, and a probe confirmed that anchoring raw SQL on `customStatement(` misses SQL held in a variable. The guard now forbids *reaching* the table (drift-object access anchored on a `…db`/`database`/`managers` receiver, plus SQL-shaped text naming the table anywhere in the file), which is syntax-agnostic. Both bypasses were probed red and reverted. **The floor is `> 20`, not `> 40`: `app/lib` contains 27 `.dart` files (26 after skipping `*.g.dart`), so `> 40` would be red on day one for the wrong reason and the fastest "fix" would be deleting the assertion.** The scan must be **seen red once** by temporarily adding an offending insert, per the standing rule.
 - Rejected: a `detail` allowlist / `InterruptionDetail` enum / validator — with no Phase 2 members the "every value passes" case asserts nothing, "Discord throws" is trivially true of any unlisted string, and an allowlist entry named `discord` is exactly as easy to add as a raw parameter.
 - **`mockMutedApps` must go.** focus_bar.dart:140-156 currently promises per-app notification counts — precisely the identity logging the privacy line forbids — under a "planned · phase 3" stamp. The slice that installs the privacy guard must stop the UI promising the opposite (shell spec §1 decision 3). It is reshaped into an identity-free `mockHeldBack` (kind + count, e.g. "notifications · 13") and **both** render sites updated: focus_bar.dart:148 **and** today_view.dart:295-313 (`m.app` at :306, `m.count` at :309) — changing the record shape without touching today_view breaks the build.
 
@@ -132,6 +138,24 @@ Each Stats history row becomes a Key-addressable `InkWell` toggling an inline ex
 6. **Missing reachable-failure handling:** untyped catch + SnackBar around the survey write (§4.1).
 7. **Untested latch:** double-tap-Save test asserting one row, no exception, and that the caller's route survives (§4.1).
 8. **Wrong rationale to avoid calendar-day arithmetic:** `users.timezone`, `users.day_start_hour` and `daily_summaries.local_date` already exist in schema v1 — Phase 5 owns the *semantics*, not the columns. The durable reason is the drift gotcha: writes go through `.toUtc()` while reads come back **local**, so any `.day` comparison installs a second, wrong definition of "today". D5 is recorded as a **duration** window, never a calendar day.
+
+## 7a. Post-implementation adversarial review (24 agents, 2026-07-26)
+
+Run against the implemented branch. 15 findings survived verification, 5 were refuted. What it changed:
+
+| # | Finding | Fix |
+|---|---|---|
+| 1 | **`end()` double-logged one pause** in two untested orderings (End-then-Resume, End-then-End while paused) because `state = null` sat after the log `await` — falsifying §4.2's own exhaustiveness claim | Clear state before the await; two new race tests |
+| 2 | **Double-tapping End session could unwind the shell** and lose the survey entirely (second `pop` targets the route beneath once the first is `popping`) | `_ending` latch on the button |
+| 3 | **Identity was representable through `kind`** (`'app_switch:chrome.exe'`), which no `detail`-shaped guard could see | bare-token validation, with a test over five smuggling attempts and all seven legal kinds |
+| 4 | **Write-confinement regex bypassable** four ways (drift managers, companions, batches, raw SQL — the last even when anchored on `customStatement(`, proven by probe) | forbid *reaching* the table; both bypasses probed red |
+| 5 | **Dismissal-at-one never asserted the dialog closed** — a "really skip?" confirmation would have kept every assertion green | `findsNothing` with `skipOffstage: false` |
+| 6 | **Nothing pinned that a rating must be chosen** — a defaulted `focus_rating` would write neutral sentinel rows that quietly qualify days | new test: Save inert with no rating, table empty |
+| 7 | `expect(counter.count, 0)` **could not fail** (counter attached after the taps it claimed to bound) | attach before the End tap; assert exactly 1 |
+| 8 | Enter saved even while **Skip held focus**, so a deliberate skip could save | gate the shortcut on the dialog root holding primary focus |
+| 9 | README stated the 90-day purge as **already implemented**, inside the privacy commitment | reworded to specified-but-unimplemented, Phase 8 owns it; README changelog row 1.5 |
+
+Refuted (and why they were not changed) and the full transcript live in the run output; the four the review confirmed as genuinely sound were the interaction counter (verified against the SDK's dispatch path), criterion 2's both-branch `blocked` pinning, the in-transaction survey guard, and the schema freeze.
 
 ## 8. Doc edits (each an explicit deliverable)
 

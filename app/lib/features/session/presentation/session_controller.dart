@@ -65,12 +65,17 @@ class SessionController extends Notifier<ActiveSession?> {
     // which would append a duplicate row for one pause (spec §4.2).
     final live = state;
     if (live == null || live.id != s.id) return;
+    // Clear BEFORE awaiting the log: while this method is suspended inside the
+    // insert, any other handler reaching its own post-await continuation would
+    // still see a paused session and log the same pause again (End-then-Resume,
+    // or a second End). Clearing first also means a throwing insert cannot
+    // leave the controller wedged on an already-ended session.
+    state = null;
     if (live.isPaused) {
       await ref.read(interruptionRepositoryProvider).logPause(
           sessionId: s.id,
           pauseStartedAt: live.pauseStartedAt!,
           resumedAt: now);
     }
-    state = null;
   }
 }

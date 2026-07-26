@@ -14,16 +14,39 @@ import 'package:flutter_test/flutter_test.dart';
 // never exercises the Phase 3 app_switch writer that actually risks it — the
 // unfailable-test class the V2 post-mortem calls its most expensive lesson.
 //
-// Instead: one writer, and identity is not representable in its API. Adding a
-// context parameter, or writing the table from anywhere else, turns this red.
+// Instead this test confines the table: exactly one file may reach it to write,
+// one may read it, and the writer's API cannot express identity (no `detail`
+// parameter, and `kind` is validated as a bare token in the repository itself).
+//
+// It forbids REACHING the table rather than enumerating write syntaxes, because
+// drift offers several — generated managers, companions, aliases, batches — and
+// raw `customStatement` SQL bypasses all of them. Every route must name the
+// table somewhere, so this is syntax-agnostic.
 void main() {
-  test(
-      'only InterruptionRepository writes interruptions, and it never mentions detail',
+  test('only InterruptionRepository reaches the interruptions table to write',
       () {
-    const owner = 'interruption_repository.dart';
-    // Writes only — the Stats reader's select over db.interruptions is legal.
-    final writes = RegExp(
-        r'InterruptionsCompanion|(?:into|update|delete)\(\s*_?db\.interruptions');
+    const owner = 'lib/features/session/data/interruption_repository.dart';
+    // The one legal reader: SessionRepository.loadSessionDetail selects the log
+    // for the Stats expansion. An exact path, not a pattern — a new reader has
+    // to be added here deliberately, in front of a reviewer.
+    const readers = {'lib/features/session/data/session_repository.dart'};
+
+    // Any route to the drift TABLE object, plus any raw SQL naming the table.
+    // Anchored on a `…db`/`database`/`managers` receiver so it does not fire on
+    // plain projections (SessionDetailView.interruptions is a List, not a table).
+    // Known limit, and why the spec calls this guarantee procedural: aliasing
+    // the database to a name not ending in "db" would slip past the scan.
+    final reaches = RegExp(
+        r'(?:\w*[dD]b|database|managers)\.interruptions\b'
+        r'|Interruptions(?:Companion|Table|Data)\b');
+    // Raw SQL touching the table, wherever the statement is built — a probe
+    // proved that anchoring on `customStatement(` misses SQL held in a variable.
+    // Matches SQL-shaped proximity, so ordinary prose mentioning the log (e.g.
+    // the Stats header copy) does not trip it.
+    final rawSql = RegExp(
+        r'(?:insert|update|delete|replace|into|from)\b[^;]{0,120}?interruptions',
+        caseSensitive: false);
+
     final offenders = <String>[];
     var scanned = 0;
     var ownerSeen = false;
@@ -33,22 +56,29 @@ void main() {
       if (entity.path.endsWith('.g.dart')) continue; // generated
       scanned++;
       final source = entity.readAsStringSync();
-      if (entity.path.endsWith(owner)) {
+      final relative = entity.path.replaceAll(r'\', '/');
+
+      if (relative.endsWith(owner)) {
         ownerSeen = true;
         expect(source.contains('detail'), isFalse,
             reason: 'app identity must stay unrepresentable in $owner — '
                 'adding it has to be a deliberate edit to this named test');
         continue;
       }
-      if (writes.hasMatch(source)) offenders.add(entity.path);
+      if (readers.any(relative.endsWith)) continue;
+      if (reaches.hasMatch(source) || rawSql.hasMatch(source)) {
+        offenders.add(relative);
+      }
     }
 
     expect(offenders, isEmpty,
-        reason: 'every interruption write must go through $owner');
+        reason: 'the interruptions table may only be reached by $owner '
+            '(writes) and $readers (reads)');
     expect(ownerSeen, isTrue, reason: '$owner must exist and have been scanned');
     // Anti-vacuity: a wrong working directory would make the scan pass having
-    // read nothing at all. app/lib holds 27 .dart files today (26 non-generated);
-    // this floor only has to prove the walk actually ran.
+    // read nothing at all. The floor sits far below the real file count on
+    // purpose — it only has to prove the walk ran, so adding files under lib/
+    // must never require touching this number.
     expect(scanned, greaterThan(20));
   });
 }
