@@ -70,7 +70,7 @@ Tier 3 exists for users who genuinely cannot self-regulate. It should not gate t
 
 | Capability | Android | Windows | Notes |
 |---|---|---|---|
-| Suppress notifications | ✅ `NotificationManager` DND (`ACCESS_NOTIFICATION_POLICY`) | ✅ Focus Assist / `SHQueryUserNotificationState` | Both need user grant |
+| Suppress notifications | ✅ `NotificationManager` DND (`ACCESS_NOTIFICATION_POLICY`) | ⚠️ `SHQueryUserNotificationState` only *reads* Focus Assist state; no documented public API *enables* it (masterplan R1) | Windows fallback: suppress own notifications, detect state, deep-link Settings |
 | Fullscreen / immersive | ✅ `WindowInsetsController` | ✅ Borderless topmost window | Reliable |
 | Keep screen on | ✅ `FLAG_KEEP_SCREEN_ON` | ✅ `SetThreadExecutionState` | Reliable |
 | Detect app switch | ✅ Lifecycle `onPause`/`onStop` | ✅ `WM_ACTIVATE` / focus events | Detection is easy; blocking is not |

@@ -469,6 +469,10 @@ Rules:
 | architecture.md §3.3 | Open: Riverpod or Bloc | Riverpod. Decision 2. |
 | architecture.md §8 | Open: bundled audio or a streaming SDK | Local audio only. Decision 9. |
 | README project structure | Lists `CONTRIBUTING.md` | Does not exist. Created in Phase 0. |
+| data-model.md §3.4 | `sessions.goal_id UUID REFERENCES goals(id)` in schema v1 | **Omitted from v1** (slice 1): `goals` doesn't exist until Phase 6 and SQLite cannot attach an FK to an existing column later. Phase 6 adds column + FK together via additive `ALTER TABLE sessions ADD COLUMN goal_id TEXT REFERENCES goals(id)` — legal under §5. |
+| data-model.md §3.1 | `users.email CITEXT UNIQUE NOT NULL`, `password_hash NOT NULL` | Local schema keeps both NOT NULL, seeded with sentinels (`local@device.invalid`, `''`) for the single local user (decision 4). `email` is `TEXT UNIQUE` (case-sensitive) — SQLite has no CITEXT; decide `COLLATE NOCASE` vs app-layer dedup when auth work nears (post-finish). |
+| data-model.md §3.4 note | "Only `ended_at`, `actual_duration_s`, `end_reason` are ever written after creation" | Reworded (harden slice): pause bookkeeping writes `paused_duration_s`/`updated_at` while in progress; the invariant is **immutable once ended**. |
+| data-model.md §3.5 | `CHECK (rating BETWEEN 1 AND 5)` on the three survey ratings | Present in schema v1 — added before the freeze after the slice-1 review caught their omission from the implementation plan (SQLite cannot add a CHECK later without a table rebuild). |
 
 ## 11. Related documents
 
@@ -481,3 +485,4 @@ Rules:
 | Version | Changes | Author/Co-author |
 | ------- | ------- | ---------------- |
 | 1.0 | Initial masterplan — V1 post-mortem, locked decisions, migration law, routines entity, phases 0–9, risks | Claude, Isaac |
+| 1.1 | §10: recorded slice-1 schema deviations (goal_id deferral, sentinel user fields, CITEXT, §3.4 wording, CHECKs) — harden slice | Claude, Isaac |
