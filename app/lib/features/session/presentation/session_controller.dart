@@ -24,15 +24,15 @@ class SessionController extends Notifier<ActiveSession?> {
   Future<void> togglePause() async {
     final s = state;
     if (s == null) return;
-    if (s.isPaused) {
-      final resumed = s.resume(_now());
-      await ref
-          .read(sessionRepositoryProvider)
-          .updatePausedDuration(resumed.id, resumed.accumulatedPause);
-      state = resumed;
-    } else {
-      state = s.pause(_now());
-    }
+    final next = s.isPaused ? s.resume(_now()) : s.pause(_now());
+    // Written on pause AND resume: every state change is persisted
+    // (architecture.md §3.4). On pause the accumulated value is unchanged
+    // but updated_at advances, which is what makes crash recovery's
+    // last-write bound exact for a session that dies while paused.
+    await ref
+        .read(sessionRepositoryProvider)
+        .updatePausedDuration(next.id, next.accumulatedPause);
+    state = next;
   }
 
   Future<void> end() async {
