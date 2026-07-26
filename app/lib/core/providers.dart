@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../features/session/data/session_repository.dart';
 import '../features/subjects/data/subject_repository.dart';
 import 'db/database.dart';
 
@@ -10,4 +11,8 @@ final databaseProvider = Provider<AppDatabase>(
 
 final subjectRepositoryProvider = Provider<SubjectRepository>(
   (ref) => SubjectRepository(ref.watch(databaseProvider)),
+);
+
+final sessionRepositoryProvider = Provider<SessionRepository>(
+  (ref) => SessionRepository(ref.watch(databaseProvider)),
 );
