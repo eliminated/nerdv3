@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../features/session/data/interruption_repository.dart';
 import '../features/session/data/session_repository.dart';
+import '../features/session/data/survey_repository.dart';
 import '../features/subjects/data/subject_repository.dart';
 import 'db/database.dart';
 
@@ -15,4 +17,12 @@ final subjectRepositoryProvider = Provider<SubjectRepository>(
 
 final sessionRepositoryProvider = Provider<SessionRepository>(
   (ref) => SessionRepository(ref.watch(databaseProvider)),
+);
+
+final interruptionRepositoryProvider = Provider<InterruptionRepository>(
+  (ref) => InterruptionRepository(ref.watch(databaseProvider)),
+);
+
+final surveyRepositoryProvider = Provider<SurveyRepository>(
+  (ref) => SurveyRepository(ref.watch(databaseProvider)),
 );

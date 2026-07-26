@@ -7,6 +7,7 @@ import 'package:nerdyapp/core/db/database.dart';
 import 'package:nerdyapp/core/db/local_user.dart';
 import 'package:nerdyapp/core/providers.dart';
 import 'package:nerdyapp/features/session/presentation/session_flow.dart';
+import 'package:nerdyapp/features/session/presentation/survey_dialog.dart';
 import 'package:nerdyapp/features/subjects/data/subject_repository.dart';
 
 class _Launcher extends ConsumerWidget {
@@ -59,7 +60,9 @@ void main() {
     await tester.tap(find.text('End session'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
-    expect(find.textContaining('RECORDS IN PHASE 2'), findsOneWidget);
+    // The survey now persists (Phase 2); it used to carry a "records in
+    // Phase 2" stamp here.
+    expect(find.byType(SurveyDialog), findsOneWidget);
 
     await tester.tap(find.text('Skip')); // one-tap dismissal
     await tester.pump();
@@ -69,6 +72,8 @@ void main() {
     final row = await db.select(db.sessions).getSingle();
     expect(row.mode, 'focused');
     expect(row.endReason, 'user_ended');
+    expect(await db.select(db.sessionSurveys).get(), isEmpty,
+        reason: 'a skipped survey writes nothing');
 
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(seconds: 1));

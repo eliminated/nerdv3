@@ -13,18 +13,22 @@ class SessionController extends Notifier<ActiveSession?> {
 
   DateTime _now() => DateTime.now().toUtc();
 
-  Future<void> start(String subjectId, {String mode = 'plain'}) async {
+  /// Returns the new session's id so the caller can attach a post-session
+  /// survey after [end] has cleared controller state.
+  Future<String> start(String subjectId, {String mode = 'plain'}) async {
     if (state != null) throw StateError('a session is already running');
     final session = ActiveSession.start(
         id: newId(), subjectId: subjectId, startedAt: _now(), mode: mode);
     await ref.read(sessionRepositoryProvider).insertStartedSession(session);
     state = session;
+    return session.id;
   }
 
   Future<void> togglePause() async {
     final s = state;
     if (s == null) return;
-    final next = s.isPaused ? s.resume(_now()) : s.pause(_now());
+    final now = _now();
+    final next = s.isPaused ? s.resume(now) : s.pause(now);
     // Written on pause AND resume: every state change is persisted
     // (architecture.md §3.4). On pause the accumulated value is unchanged
     // but updated_at advances, which is what makes crash recovery's
@@ -36,6 +40,13 @@ class SessionController extends Notifier<ActiveSession?> {
     // guarded write already no-oped in the DB — don't resurrect it here.
     if (!identical(state, s)) return;
     state = next;
+    if (s.isPaused) {
+      // This transition CLOSED a pause, so the event is complete: log it once
+      // with the pause's own timestamps. An interruption row is append-only,
+      // so it is never written until its duration is known.
+      await ref.read(interruptionRepositoryProvider).logPause(
+          sessionId: s.id, pauseStartedAt: s.pauseStartedAt!, resumedAt: now);
+    }
   }
 
   Future<void> end() async {
@@ -48,8 +59,23 @@ class SessionController extends Notifier<ActiveSession?> {
           actualDuration: s.elapsed(now),
           totalPaused: s.totalPaused(now),
         );
-    // A racing togglePause() may have swapped in a new state object for the
-    // same session; the row is ended either way, so clear by id, not identity.
-    if (state?.id == s.id) state = null;
+    // Whether an open pause still needs logging is decided from LIVE state,
+    // never from the snapshot captured before the await: a resume that won the
+    // race has already logged this pause while `s.isPaused` still reads true,
+    // which would append a duplicate row for one pause (spec §4.2).
+    final live = state;
+    if (live == null || live.id != s.id) return;
+    // Clear BEFORE awaiting the log: while this method is suspended inside the
+    // insert, any other handler reaching its own post-await continuation would
+    // still see a paused session and log the same pause again (End-then-Resume,
+    // or a second End). Clearing first also means a throwing insert cannot
+    // leave the controller wedged on an already-ended session.
+    state = null;
+    if (live.isPaused) {
+      await ref.read(interruptionRepositoryProvider).logPause(
+          sessionId: s.id,
+          pauseStartedAt: live.pauseStartedAt!,
+          resumedAt: now);
+    }
   }
 }

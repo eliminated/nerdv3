@@ -36,6 +36,9 @@ Decisions taken with Isaac (2026-07-26), each after options were presented:
 - No onboarding (Phase 9 owns it; the design bundle is its reference).
 - No survey persistence (Phase 2), no interruption log (Phase 2), no planned-session entity
   (deferred decision), no OS-level focus enforcement (Phase 3).
+  **Superseded 2026-07-26:** Phase 2 shipped both — the survey now persists and the
+  interruption log is written and read back. See
+  `2026-07-26-phase-2-signal-design.md`.
 - No schema change of any kind.
 
 ## 3. Design language — "Modernist" tokens → Flutter
@@ -90,10 +93,10 @@ region is wrapped by the stamp widget (`MockStamp(label: 'PLANNED · PHASE 5')`)
 
 | View | Real | Mock (stamped) |
 |---|---|---|
-| Today | date header; "Start a session" card (subject picker → mode prompt); active-subjects count | streak/week/XP stat strip; "up next" schedule card; rest-of-today list; badges; muted apps |
+| Today | date header; "Start a session" card (subject picker → mode prompt); active-subjects count | streak/week/XP stat strip; "up next" schedule card; rest-of-today list; badges; held-back panel (*renamed from "muted apps" in Phase 2 and made identity-free — per-app counts would advertise exactly what the privacy line forbids; see U9*) |
 | Subjects | card grid from `watchSubjects` (name, colour swatch, source line, edit/archive/delete via dialog + menu); archived table with real Restore; "+ Add a subject" cell | per-subject level tag; weekly-target progress bar; topics chips; derived 3-letter code |
 | Schedule | — | entire week grid, headers, session blocks |
-| Stats & Streaks | "Recent sessions" table = real `watchHistory` (duration, started, `· crashed` marker) | stat strip, 14-day chart, split-by-subject, emergency-exit log |
+| Stats & Streaks | "Recent sessions" table = real `watchHistory` (duration, started, `· crashed` marker); *since Phase 2:* each row expands to its real survey and interruption log | stat strip, 14-day chart, split-by-subject (no emergency-exit log was built — that row of this table was aspirational) |
 | Goals | — | weekly targets, milestones, badges |
 | Library | — | material table |
 | Settings | Back up database (moved from old AppBar, same `backupDatabase` path) | local-vault/cloud cards (cloud stamped POST-1.0), appearance, focus prefs, Ultra config (stamped PLANNED), danger zone |
@@ -114,7 +117,8 @@ region is wrapped by the stamp widget (`MockStamp(label: 'PLANNED · PHASE 5')`)
 4. **End** → `SessionController.end()` (unchanged) → **survey dialog**: focus rating 1–5
    required to submit, comprehension/difficulty/note optional; one interaction to dismiss
    ("Skip"), two for the common path (tap rating → Save). Stamped "RECORDS IN PHASE 2"; both
-   buttons only close the dialog this slice.
+   buttons only close the dialog this slice. **Superseded 2026-07-26:** Phase 2 removed the
+   stamp — Save now persists the survey and Skip deliberately writes nothing.
 5. Crash recovery, immutability guards, pause persistence: untouched and still covered by their
    existing tests.
 
@@ -151,3 +155,4 @@ region is wrapped by the stamp widget (`MockStamp(label: 'PLANNED · PHASE 5')`)
 | U6 | Ultra Focus tiering & emergency-exit economy | Post-finish, evidence-gated (focus-enforcement.md §10); UI stays stamped |
 | U7 | Library / material attachments | Not in v1.0 roadmap; revisit at Phase 7 |
 | U8 | Design-bundle "measured, not self-reported" stance vs survey-centric masterplan | Resolved in favour of the survey (decision 4 above); Stats copy must not disparage self-report |
+| U9 | The Today "held back while you focus" panel showed per-app notification counts — the app identity data-model §3.6 forbids | Closed in Phase 2: reshaped to identity-free event kinds in `mock_data.dart` (`mockHeldBack`) at both render sites |

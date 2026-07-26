@@ -46,10 +46,13 @@ const mockBadges = <MockBadge>[
   (name: 'Deep Focus ×50', desc: '50 focused sessions completed'),
 ];
 
-const mockMutedApps = <({String app, String count})>[
-  (app: 'Slack', count: '4'),
-  (app: 'Mail', count: '2'),
-  (app: 'Discord', count: '7'),
+/// Identity-free by design: the interruption log records the KIND of event,
+/// never which app was involved (data-model.md §3.6). A mock promising per-app
+/// counts would advertise a capability the privacy line forbids.
+const mockHeldBack = <({String kind, String count})>[
+  (kind: 'Notifications', count: '13'),
+  (kind: 'Focus-loss prompts', count: '4'),
+  (kind: 'Exit attempts', count: '1'),
 ];
 
 const mockScheduleBlocks = <MockScheduleBlock>[

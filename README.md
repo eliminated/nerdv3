@@ -100,8 +100,8 @@ Legend: ✅ Shipped · 🔨 In progress · 📋 Planned · 💡 Idea
 | **Session timer** | The core loop: pick a subject, start a session, log the work. | ✅ Shipped (start/pause/end + history; crash recovery 🔨) |
 | **Focused mode** | Light-touch session mode — suppresses notifications and reduces on-screen distraction. | 📋 Planned |
 | **Ultra-Focus mode** | Hard lockdown. Blocks app switching and exit attempts, suppresses all notifications, and keeps you inside the app with built-in companion tools. See [platform reality](#focus-enforcement--platform-reality). | 📋 Planned |
-| **Post-session survey** | Short check-in after each session rating focus quality and difficulty. Feeds streak quality and topic evaluation — this is the app's core signal, not a side feature. | 📋 Planned |
-| **Interruption log** | Records what pulled you away and how often, so analytics point at a cause rather than a number. | 📋 Planned |
+| **Post-session survey** | Short check-in after each session rating focus quality and difficulty. Feeds streak quality and topic evaluation — this is the app's core signal, not a side feature. | ✅ Shipped (two taps, or 1–5 then Enter) |
+| **Interruption log** | Records the *kind* of thing that pulled you away and how often — never which app — so analytics point at a cause rather than a number. | ✅ Shipped (pauses + self-reported distractions; focus-mode events land with Focused mode) |
 | **Streak & consistency tracking** | Consecutive active days, weighted by session quality rather than raw time. | 📋 Planned |
 | **Goal setting** | Define a target, break it into a plan, divide the plan into sessions. | 📋 Planned |
 | **Topics & subtopics planner** | Organize a subject into a topic tree, evaluated against post-session feedback. | 📋 Planned |
@@ -244,7 +244,7 @@ runnable, usable app.
       (proven able to fail), one-button database backup, project docs
 - [ ] **Phase 1 — Core loop remainder**: crash recovery (`end_reason='crashed'`), full subject
       CRUD, session-immutability tests, wall-clock accuracy check
-- [ ] **Phase 2 — The signal**: post-session survey (≤2 taps), interruption log
+- [x] **Phase 2 — The signal**: post-session survey (≤2 taps), interruption log *(code merged; the phase's manual verification is still outstanding)*
 - [ ] **Phase 3 — Focused mode (Tier 1, Windows)**: fullscreen sessions, escapes detected,
       logged, and gently frictioned
 - [ ] **Phase 4 — Topics & mastery**: topic tree, session tagging, computed mastery
@@ -271,12 +271,11 @@ spaced repetition, external course tracking, accountability/social.
 
 NerdyApp observes notification state and app-switching behaviour to make focus modes work. That is sensitive, so the commitment is stated plainly:
 
-<!-- TODO: confirm and keep accurate as the implementation lands -->
-
-- Session logs and survey responses are stored locally by default.
+- Session logs and survey responses are stored locally. There is no server and no sync before v1.0, so "by default" currently means "only".
+- **The interruption log records the kind of event, never the identity.** It stores that you switched away or were distracted — never which app you opened. This is enforced in code, not just promised: the one repository allowed to write that table has no parameter capable of carrying an app name, and a test fails the build if any other code writes it.
 - No study content, notes, or interruption data is sold or shared with third parties.
-- Sync is opt-in.
-- All user data can be exported or deleted on request.
+- Sync, if it is ever built, will be opt-in (post-1.0, and only from actual need).
+- Export and delete-all ship in Phase 8; a one-button database backup already works today. Interruption rows are *specified* to auto-purge after 90 days — that retention rule is recorded and owned by Phase 8, and is **not implemented yet**.
 
 ## Contributing
 
@@ -304,4 +303,6 @@ Contributions are welcome. Please open an issue before starting significant work
 | 1.1 | - Build iteration V2 → V3 after a from-scratch restart<br>- Filled the iteration-history table, including an honest V1 and V2 post-mortem<br>- Repointed issues link to the nerdv3 repository | Claude\nIsaac |
 | 1.2 | -Truer statement | Isaac |
 | 1.3 | - Roadmap rewritten to mirror masterplan §7 (slice-based; auth/server moved post-1.0)<br>- Tech stack marked decided per masterplan §3; Riverpod/Drift pins recorded<br>- Session timer marked shipped (slice 1)<br>- License (MIT), CONTRIBUTING link, maintainer filled in | Claude\nIsaac |
+| 1.4 | - Post-session survey and interruption log marked shipped (Phase 2); interruption row reworded to say it records the kind, never the app<br>- Phase 2 roadmap item checked off<br>- Privacy section rewritten: dropped the stale TODO, stated the enforced no-identity guarantee, corrected "local by default" to "local only" pre-1.0, and named where export/delete/backup actually stand | Claude\nIsaac |
+| 1.5 | Review corrections: the 90-day interruption purge is stated as specified-but-unimplemented (Phase 8 owns it) rather than as a shipped guarantee, and the Phase 2 roadmap tick notes that manual verification is still outstanding | Claude\nIsaac |
 

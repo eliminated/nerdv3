@@ -21,7 +21,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions are r
 
 - The Modernist desktop shell: collapsible sidebar (Today, Schedule, Subjects, Goals, Stats & Streaks, Library, Settings), status bar, bundled Archivo typography, flat zero-radius design language. Unbuilt views render as clearly stamped mocks so the full proposed UX is walkable.
 - Per-session mode prompt (Normal / Focus real and recorded; Ultra shown but disabled, marked planned) and a redesigned in-session focus screen.
-- Post-session survey dialog (focus/comprehension/difficulty/note) — rendered and dismissible, marked "records in Phase 2"; persistence is Phase 2's exit criterion.
+- Post-session survey dialog (focus/comprehension/difficulty/note) — rendered and dismissible.
+- **The survey now records.** Focus rating required, everything else optional; two interactions for the common path, one to skip (skipping deliberately writes nothing — a day with no survey never qualifies for a streak). Keyboard-operable: 1–5 rate, Enter saves, Escape skips.
+- Interruption log: `manual_pause` written once per completed pause with its own start time and duration, plus a one-tap "I got distracted" button (`self_reported`) with a live in-session count. Logged in every session mode.
+- Expanding a session in Stats & Streaks shows its survey answers and its interruption log.
+- A privacy guard test: interruption writes are confined to one repository whose API cannot express app identity.
 
 ### Changed
 

@@ -185,6 +185,19 @@ CREATE TABLE session_surveys (
 tap.** A survey that feels like homework gets skipped, and once skipped it stops being
 data. Two taps maximum for the common path.
 
+**Surveys are insert-only, and two one-way doors under the frozen schema say why** (recorded in
+the Phase 2 slice, both verified):
+
+- An upsert cannot rescue a second attempt. drift defaults an upsert's conflict target to the
+  **primary key**, and each attempt carries a fresh UUID, so `ON CONFLICT(id)` never fires and
+  the `session_id` UNIQUE constraint still raises. A future backfill must pass an explicit
+  conflict target of `session_id`.
+- **A survey must never be soft-deleted.** `session_id` is UNIQUE at column level, so SQLite's
+  implicit unique index counts tombstones: a soft-deleted row would permanently block re-rating
+  that session, and the additive-only law forbids dropping the constraint to fix it.
+
+Editing or backfilling a rating is deferred decision **D5** (masterplan §9).
+
 The three ratings answer different questions and shouldn't be collapsed:
 
 | Rating | Question | Feeds |
@@ -204,6 +217,8 @@ CREATE TABLE interruptions (
     kind        TEXT NOT NULL,
                 -- 'app_switch'|'exit_attempt'|'notification'
                 -- |'manual_pause'|'idle_timeout'|'device_locked'
+                -- |'self_reported'  (added in Phase 2; the column is TEXT with
+                --                    no CHECK, so extending it needs no migration)
     occurred_at TIMESTAMPTZ NOT NULL,
     duration_s  INTEGER,                  -- how long away, if measurable
     blocked     BOOLEAN NOT NULL DEFAULT false,  -- did enforcement stop it?
@@ -222,6 +237,28 @@ attempts across modes answers whether Ultra-Focus actually works or just annoys 
 **Privacy line:** `detail` records *kind*, never *identity*. Store `app_switch`, not the
 name of the app switched to. Recording which apps a student opens is surveillance, and it
 would also make an Accessibility Service permission far harder to justify to Google.
+
+Phase 2 enforces this structurally rather than by convention: the single repository allowed to
+write this table exposes no context parameter at all, so identity is not representable through
+the API, and a source-confinement test fails if any other file writes the table or if that
+repository ever mentions `detail`. Phase 3's first legitimate `detail` write therefore has to be
+a deliberate signature change in a privacy-named file.
+
+**A row is written once, when the event is complete.** `manual_pause` is appended at the moment a
+pause *ends* (on resume, or when the session ends while still paused), carrying `occurred_at` =
+the pause start and `duration_s` = its length. Nothing is inserted at pause time and no row is
+ever updated, which is what keeps the "union, deduped by id" sync strategy
+([architecture.md §5.2](./architecture.md#52-conflict-resolution)) well-defined. **Known
+limitation:** a process killed *while paused* therefore logs no row at all — accepted, because
+that session closes as `end_reason='crashed'` and is excluded from qualification anyway, so its
+log has no consumer.
+
+**Retention (locked decision 8):** interruptions are purged after 90 days by a **hard DELETE**,
+device-local, implemented in Phase 8 beside backup/restore. The cutoff must be injected rather
+than read from the wall clock inside the purge (a clock skewed into the future would otherwise
+match every row), and the boundary is fixture-tested at 89 / 90 / 91 / 365 days. Once sync
+exists, the union-dedup rule must be bounded by the same retention window or purged rows
+resurrect from a peer.
 
 ### 3.7 `goals`
 
@@ -287,9 +324,15 @@ This is the **quality-weighted streak** from the README. A distracted 15 minutes
 focus rating of 1 shouldn't buy a streak day — that's how streak mechanics become
 something to game rather than something that reflects work.
 
-> **Open question.** Should a missing survey block qualification? Blocking coerces survey
-> completion (good data, bad feel). Suggested compromise: unsurveyed sessions count at a
-> neutral 3.0 so the day can still qualify, while surveyed sessions carry real weight.
+**Settled: a missing survey blocks qualification** (masterplan decision 5, §10). There is no
+neutral-3.0 substitution — an unsurveyed session contributes no rating, so a day with no survey
+at all cannot qualify. `avg_focus_rating` is averaged over **surveyed sessions only**, which is
+what makes a user who rated two of three sessions unpunished for the third.
+
+`avg_focus_rating` must also be restricted to sessions whose `end_reason` is `completed` or
+`user_ended`: a crashed session's duration is a lower-bound estimate, so letting one weight the
+average would drag a legitimately good day below 3.0. Phase 2 enforces the write side of this —
+the survey repository refuses to attach a rating to a crashed session at all.
 
 ### 5.2 Streak length
 
@@ -302,10 +345,10 @@ Today not yet qualified does NOT break the streak — the day isn't over.
 That last line matters: a streak that reads "0" at 9am when the user studied yesterday is
 a demoralising bug, not a feature.
 
-> **Consider a grace mechanic.** One missed day per week forgiven, or a limited "freeze"
-> token. Research on habit formation is fairly consistent that a single miss doesn't break
-> a habit — but an app that resets a 40-day streak to zero often makes users quit outright.
-> Cheap to add, disproportionately effective at retention.
+**Declined: no grace mechanic, no freeze tokens** (masterplan decision 5, §10). A missed day
+breaks the streak. The retention argument was heard and rejected in favour of a counter that
+means something; the mitigation is that the calendar heatmap ships in the same phase as the
+counter (Phase 5), so a reset counter never erases the visible record of real work.
 
 ### 5.3 Topic mastery
 
