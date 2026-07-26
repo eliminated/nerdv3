@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+
+# One command per step throughout: GitHub Actions pwsh propagates only the
+# last command's exit code from a multi-line run block (V2-verified).
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.4'
+          channel: stable
+          cache: true
+      - name: Pub get
+        run: flutter pub get
+      # *.g.dart is gitignored by design, so codegen must precede analyze/test.
+      - name: Generate code
+        run: dart run build_runner build
+      - name: Analyze
+        run: flutter analyze
+      - name: Test
+        run: flutter test
+      - name: Re-dump schema
+        run: dart run drift_dev schema dump lib/core/db/database.dart drift_schemas/
+      # intent-to-add makes a NEW dump file (schemaVersion bump) visible to
+      # git diff, which otherwise only reports tracked paths (V2-verified hole).
+      - name: Register untracked files so diff can see new dump versions
+        run: git add --intent-to-add .
+      - name: Fail on schema drift
+        run: git diff --exit-code -- drift_schemas
