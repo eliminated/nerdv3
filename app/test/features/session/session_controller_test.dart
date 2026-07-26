@@ -44,21 +44,38 @@ void main() {
         reason: 'pause must persist a write (architecture.md §3.4)');
   });
 
+  test('a pause racing an end cannot resurrect an ended session', () async {
+    final controller = container.read(sessionControllerProvider.notifier);
+    await controller.start(subjectId);
+
+    // Fire both without awaiting in between, as two quick taps would.
+    final ending = controller.end();
+    final pausing = controller.togglePause();
+    await Future.wait([ending, pausing]);
+
+    expect(container.read(sessionControllerProvider), isNull,
+        reason: 'the ended session must not survive as controller state');
+    final row = await db.select(db.sessions).getSingle();
+    expect(row.endReason, 'user_ended');
+  });
+
   test('real-clock session records wall time, active vs paused split',
       () async {
     final controller = container.read(sessionControllerProvider.notifier);
     await controller.start(subjectId);
     await Future<void>.delayed(const Duration(seconds: 2));
     await controller.togglePause(); // pause
-    await Future<void>.delayed(const Duration(seconds: 2));
+    // The pause window is 3s so that a regression folding paused time into
+    // active time (≥7s wall, truncated to ≥7) must exceed the [3, 6] bound.
+    await Future<void>.delayed(const Duration(seconds: 3));
     await controller.togglePause(); // resume
     await Future<void>.delayed(const Duration(seconds: 2));
     await controller.end();
 
     final row = await db.select(db.sessions).getSingle();
-    // ~4s active, ~2s paused; generous bounds for scheduler jitter.
+    // ~4s active, ~3s paused; generous bounds for scheduler jitter.
     expect(row.actualDurationS, inInclusiveRange(3, 6));
-    expect(row.pausedDurationS, inInclusiveRange(1, 4));
+    expect(row.pausedDurationS, inInclusiveRange(2, 5));
     expect(row.endReason, 'user_ended');
     expect(row.endedAt, isNotNull);
   });

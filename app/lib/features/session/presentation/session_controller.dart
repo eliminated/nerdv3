@@ -32,6 +32,9 @@ class SessionController extends Notifier<ActiveSession?> {
     await ref
         .read(sessionRepositoryProvider)
         .updatePausedDuration(next.id, next.accumulatedPause);
+    // A racing end() may have closed the session while we awaited; its
+    // guarded write already no-oped in the DB — don't resurrect it here.
+    if (!identical(state, s)) return;
     state = next;
   }
 
@@ -45,6 +48,8 @@ class SessionController extends Notifier<ActiveSession?> {
           actualDuration: s.elapsed(now),
           totalPaused: s.totalPaused(now),
         );
-    state = null;
+    // A racing togglePause() may have swapped in a new state object for the
+    // same session; the row is ended either way, so clear by id, not identity.
+    if (state?.id == s.id) state = null;
   }
 }

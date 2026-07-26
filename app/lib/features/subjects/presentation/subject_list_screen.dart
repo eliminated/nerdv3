@@ -8,7 +8,6 @@ import '../../../core/providers.dart';
 import '../../session/presentation/history_screen.dart';
 import '../../session/presentation/session_controller.dart';
 import '../../session/presentation/session_screen.dart';
-import '../data/subject_repository.dart';
 
 const subjectPalette = <String>[
   '#EF5350', '#FFA726', '#FFD54F', '#66BB6A',

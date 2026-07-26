@@ -79,7 +79,10 @@ class SessionRepository {
       for (final row in open) {
         final active = row.updatedAt.difference(row.startedAt).inSeconds -
             row.pausedDurationS;
-        await (_db.update(_db.sessions)..where((t) => t.id.equals(row.id)))
+        // The isNull guard is redundant inside this transaction; it keeps the
+        // write safe if this loop ever runs outside one.
+        await (_db.update(_db.sessions)
+              ..where((t) => t.id.equals(row.id) & t.endedAt.isNull()))
             .write(
           SessionsCompanion(
             endedAt: Value(row.updatedAt),

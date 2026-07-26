@@ -127,6 +127,8 @@ void main() {
             .isAtSameMomentAs(t0.add(const Duration(minutes: 30))),
         isTrue);
     expect(row.actualDurationS, 25 * 60);
+    // Literal idempotency: a second run finds nothing to recover.
+    expect(await repo.recoverCrashedSessions(), 0);
   });
 
   test('recovery clamps a negative computed duration to zero', () async {
