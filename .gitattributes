@@ -1,0 +1,3 @@
+# The schema freeze artifacts must diff cleanly: no CRLF phantom changes on
+# exactly the files whose diffs reviewers must scrutinize.
+app/drift_schemas/*.json text eol=lf

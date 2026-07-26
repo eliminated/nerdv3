@@ -11,6 +11,10 @@ void main() {
 
   setUpAll(() => verifier = SchemaVerifier(GeneratedHelper()));
 
+  // NOTE: this runtime verifier cannot see STRICT-table flips, Dart-side
+  // clientDefault changes, or date-storage options — the CI schema-dump diff
+  // guard is load-bearing for those. Do not "simplify" CI by removing the
+  // dump steps on the grounds that this test covers everything.
   test('onCreate from live table definitions matches the committed v1 snapshot',
       () async {
     // The database is FRESH: onCreate runs createAll() from the CURRENT code,

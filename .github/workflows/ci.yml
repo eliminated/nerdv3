@@ -5,6 +5,10 @@ on:
 
 # One command per step throughout: GitHub Actions pwsh propagates only the
 # last command's exit code from a multi-line run block (V2-verified).
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: windows-latest
@@ -35,3 +39,10 @@ jobs:
         run: git add --intent-to-add .
       - name: Fail on schema drift
         run: git diff --exit-code -- drift_schemas
+      # A coordinated regeneration (edit tables + re-dump + regenerate the test
+      # helper) passes both guards above. Frozen snapshots must never change on
+      # a branch: compare v1 against main directly.
+      - name: Fetch main for the freeze comparison
+        run: git fetch origin main
+      - name: Fail if the frozen v1 snapshot was rewritten
+        run: git diff --exit-code origin/main -- drift_schemas/drift_schema_v1.json
