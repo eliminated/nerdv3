@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/mock/mock_data.dart';
+import '../../../core/providers.dart';
 import '../../../core/shell/mock_stamp.dart';
 import '../../../core/theme/modernist.dart';
 import 'session_controller.dart';
@@ -28,6 +29,10 @@ class FocusBarScreen extends ConsumerStatefulWidget {
 class _FocusBarScreenState extends ConsumerState<FocusBarScreen> {
   late final Timer _ticker;
 
+  /// Created once: the ticker rebuilds this widget every second, and building a
+  /// fresh drift stream per rebuild would leak a subscription each time.
+  Stream<int>? _selfReports;
+
   @override
   void initState() {
     super.initState();
@@ -51,6 +56,9 @@ class _FocusBarScreenState extends ConsumerState<FocusBarScreen> {
     final now = DateTime.now().toUtc();
     final elapsed = session.elapsed(now);
     final isFocus = session.mode == 'focused';
+    _selfReports ??= ref
+        .read(interruptionRepositoryProvider)
+        .watchSelfReportCount(session.id);
 
     return Scaffold(
       body: Column(
@@ -108,7 +116,13 @@ class _FocusBarScreenState extends ConsumerState<FocusBarScreen> {
                         style: TextStyle(fontSize: 11.5, color: naFaint(.5)),
                       ),
                       const SizedBox(height: 28),
-                      Row(children: [
+                      // Wrap, not Row: the action set must survive a narrow
+                      // window without clipping a control.
+                      Wrap(
+                          spacing: 12,
+                          runSpacing: 10,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
                         OutlinedButton(
                           onPressed: () => ref
                               .read(sessionControllerProvider.notifier)
@@ -116,7 +130,6 @@ class _FocusBarScreenState extends ConsumerState<FocusBarScreen> {
                           child:
                               Text(session.isPaused ? 'Resume' : 'Pause'),
                         ),
-                        const SizedBox(width: 12),
                         FilledButton(
                           onPressed: () async {
                             await ref
@@ -127,6 +140,28 @@ class _FocusBarScreenState extends ConsumerState<FocusBarScreen> {
                             }
                           },
                           child: const Text('End session'),
+                        ),
+                        // One tap, no chooser and no free text: the log records
+                        // that a distraction happened, never what it was
+                        // (data-model.md §3.6). R3's desktop mitigation.
+                        OutlinedButton(
+                          key: const Key('self-report'),
+                          onPressed: () => ref
+                              .read(interruptionRepositoryProvider)
+                              .logSelfReport(
+                                  sessionId: session.id,
+                                  occurredAt: DateTime.now().toUtc()),
+                          child: const Text('I got distracted'),
+                        ),
+                        StreamBuilder<int>(
+                          stream: _selfReports,
+                          builder: (context, snap) {
+                            final n = snap.data ?? 0;
+                            return Text(n == 0 ? '' : 'logged ×$n',
+                                key: const Key('self-report-count'),
+                                style: TextStyle(
+                                    fontSize: 11.5, color: naFaint(.5)));
+                          },
                         ),
                       ]),
                     ],
@@ -139,18 +174,16 @@ class _FocusBarScreenState extends ConsumerState<FocusBarScreen> {
             padding: const EdgeInsets.fromLTRB(24, 0, 24, 18),
             child: MockStamp(
               label: 'planned · phase 3',
-              child: Row(
+              child: Wrap(
+                spacing: 14,
+                runSpacing: 6,
                 children: [
-                  Text('Held back so far:',
-                      style: const TextStyle(
+                  const Text('Held back so far:',
+                      style: TextStyle(
                           fontSize: 12, fontWeight: FontWeight.w600)),
-                  const SizedBox(width: 14),
-                  for (final m in mockMutedApps) ...[
-                    Text('${m.app} · ${m.count}',
-                        style:
-                            TextStyle(fontSize: 12, color: naFaint(.6))),
-                    const SizedBox(width: 14),
-                  ],
+                  for (final m in mockHeldBack)
+                    Text('${m.kind} · ${m.count}',
+                        style: TextStyle(fontSize: 12, color: naFaint(.6))),
                 ],
               ),
             ),

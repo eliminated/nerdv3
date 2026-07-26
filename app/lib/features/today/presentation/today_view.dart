@@ -288,11 +288,11 @@ class _TodayViewState extends ConsumerState<TodayView> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('SILENCED WHILE YOU FOCUS',
+                          Text('HELD BACK WHILE YOU FOCUS',
                               style:
                                   kickerStyle.copyWith(color: naFaint(.6))),
                           const SizedBox(height: 8),
-                          for (final m in mockMutedApps)
+                          for (final m in mockHeldBack)
                             Container(
                               decoration: BoxDecoration(
                                   border: Border(top: naDivider1)),
@@ -303,7 +303,7 @@ class _TodayViewState extends ConsumerState<TodayView> {
                                     size: 14, color: naFaint(.4)),
                                 const SizedBox(width: 10),
                                 Expanded(
-                                    child: Text(m.app,
+                                    child: Text(m.kind,
                                         style:
                                             const TextStyle(fontSize: 12.5))),
                                 Text('${m.count} held',
