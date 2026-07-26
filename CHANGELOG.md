@@ -16,3 +16,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions are r
 - Schema-v1 verification harness (drift schema snapshot + verifier test with dropped-entity detection) and a CI dump-drift guard, both demonstrated able to fail.
 - One-button database backup (`VACUUM INTO`) with a save-location picker.
 - MIT license, CONTRIBUTING.md, and a masterplan-aligned README roadmap.
+- Crash recovery: sessions left open by a crash are closed on next launch with `end_reason = 'crashed'` (excluded from future streak inputs) and shown in history marked crashed.
+- Full subject management: colour, source and source name, edit, archive/unarchive with an archived view, and soft delete that preserves session history.
+
+### Changed
+
+- Pausing a session now persists immediately (previously only resume did), so crash recovery can close a session that died while paused at the exact pause moment.
+- Ended sessions are immutable at the repository level: post-end writes are refused, and a racing pause can no longer resurrect an ended session in the UI.
