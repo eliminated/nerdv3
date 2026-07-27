@@ -48,7 +48,35 @@ jobs:
         run: git fetch origin main
       - name: Fail if a frozen schema snapshot was rewritten or removed
         run: git diff --exit-code --diff-filter=MD origin/main -- drift_schemas
-      # V4 note (2026-07-27): the Flutter app is retired to reference status, but
+      # V3 note (2026-07-27): the Flutter app is retired to reference status, but
       # its suite is the behavioural specification the Electron rewrite must
       # reproduce, so it keeps running until the desktop suite replaces it.
       # The schema guards below still protect the frozen v1 that the rewrite ports.
+
+  # The Electron rewrite's correctness core (slice V3-A). Independent of the
+  # Flutter job on purpose: the two must be able to go red separately, and the
+  # reference job retires once V3-D proves parity.
+  desktop:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      # Pinned exactly, as Flutter is. node:sqlite is why the floor is Node 25 —
+      # it is what lets core open a database with no native module and no MSVC
+      # step. If a future Electron target lacks it, better-sqlite3 is the
+      # recorded fallback and only src/db/driver.ts changes.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '25.7.0'
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - name: Install
+        run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Test
+        run: npm test

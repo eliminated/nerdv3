@@ -13,3 +13,4 @@ app-flutter/windows/flutter/ephemeral/
 *.g.dart
 app-flutter/android/local.properties
 app-flutter/android/**/GeneratedPluginRegistrant.java
+node_modules/
