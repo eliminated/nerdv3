@@ -17,6 +17,8 @@
  *    not synchronous, and an async interface accommodates all three.
  */
 
+import type { ActiveSession } from '../domain/active-session.js';
+
 export interface SubjectRow {
   id: string;
   name: string;
@@ -47,4 +49,40 @@ export interface SubjectRepository {
   remove(id: string): Promise<void>;
 
   list(opts?: { archived?: boolean }): Promise<SubjectRow[]>;
+}
+
+export interface HistoryEntry {
+  sessionId: string;
+  subjectName: string;
+  startedAt: Date;
+  actualDurationS: number;
+  /** 'user_ended' | 'completed' | 'crashed' — null only for a row still open. */
+  endReason: string | null;
+}
+
+export interface SessionRepository {
+  insertStarted(s: ActiveSession): Promise<void>;
+
+  /**
+   * Persists the accumulated pause and advances the `updated_at` watermark.
+   * Refused for an ended session at the data layer (V3 spec §4.3).
+   */
+  updatePausedDuration(id: string, totalPausedMs: number): Promise<void>;
+
+  /** The one-shot closing write. Refused for an ended session. */
+  end(a: {
+    id: string;
+    endedAt: Date;
+    actualDurationMs: number;
+    totalPausedMs: number;
+  }): Promise<void>;
+
+  /**
+   * Closes sessions left unterminated by a crash, at their last persisted
+   * write, clamped at zero, with `end_reason = 'crashed'`. Returns how many
+   * were recovered. Launch-time only — see the repository's own note.
+   */
+  recoverCrashedSessions(): Promise<number>;
+
+  listHistory(): Promise<HistoryEntry[]>;
 }
