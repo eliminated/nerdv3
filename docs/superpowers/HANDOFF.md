@@ -1,6 +1,105 @@
 # Session Handoff — NerdyApp Companion (build iteration **V3** — desktop stack changed 2026-07-27)
 
-> ## ⏩ LATEST (2026-07-27, "V3 pivot — Electron rewrite begins" session) — READ THIS FIRST
+> ## ⏩ LATEST (2026-07-27, "V3-A — core in TypeScript" session) — READ THIS FIRST
+>
+> **State:** on **`feat/v4-electron-rewrite`** (the integration branch), clean, in sync with
+> `origin`. Last commit **`e402baa`** — PR #6 squash-merged, branch `feat/v3a-core-typescript`
+> deleted — on top of `b1a1d85`. **`main` is still at `d70d6a8`, deliberately:** it must not
+> receive a half-ported app, so V3-B/C/D land on this branch and it merges to `main` once the
+> rewrite is runnable. **107 tests green; CI green on both jobs (`build` + `desktop`).**
+>
+> **⚠️ Manual verification is NOT discharged by any of this.** The one-hour wall-clock accuracy
+> check and the crash-recovery kill test are properties of the *product* and are owed against a
+> real Electron build (V3-D). Nothing in V3-A touches them.
+>
+> **⚠️ NAMING CORRECTED THIS SESSION.** The previous session labelled the Electron rewrite "V4".
+> Isaac overturned that: the masterplan, the four design documents, the frozen schema v1 and the
+> whole phase sequence carry across untouched, and the stack-change spec itself calls the result
+> "a port of proven logic, not a redesign". A stack change inside a surviving plan is **not** a
+> from-scratch restart, so **this is still build iteration V3** and `CLAUDE.md`'s "Currently V3" is
+> now correct rather than stale. **Three numbers, deliberately distinct** (extends `CLAUDE.md`'s
+> two): build iteration **`V3`** · release version **`v0.*.*`** · plan id
+> **`P<iteration><plan><slice>`**, so this slice's plan is **P31A**. Rewrite slices are
+> **V3-A … V3-D**. The branch name `feat/v4-electron-rewrite` and the commit subjects of `b4cd16e`,
+> `a695f8d`, `b63d016`, `b1a1d85` still say V4 — published history, left alone; the branch dies at
+> merge.
+>
+> **V3-A — `core` in TypeScript: DONE & merged (PR #6).** Shipped: npm workspace under `desktop/`
+> (TS strict + `NodeNext`, vitest, ESLint type-checked with `no-floating-promises`); `SqliteDriver`
+> over `node:sqlite` with a SAVEPOINT-based `Database`; `schema.sql` applied verbatim on open;
+> `ensureLocalUser`; the `ActiveSession` timing state machine; all four repositories behind the
+> port interfaces of V3 spec §5; `loadSessionDetail`; the privacy write-confinement guard; a
+> second CI job on `windows-latest` with Node pinned `25.7.0`.
+>
+> **Nineteen guards probed RED before being trusted**, each asserting its edit actually applied and
+> each file verified byte-identical afterwards (outputs tabulated in PR #6). Notable: the schema
+> freeze replacement catches an added **table**, which the retired drift verifier at its defaults
+> (`validateDropped: false`) did not.
+>
+> **A defect found while writing the tests:** every repository method declared `Promise<void>` but
+> **threw synchronously** — sync bodies with a `Promise.resolve()` tail — so `Promise.all([...])`
+> or a bare `.catch()` would have got an uncaught exception instead of a rejection. Same
+> async-hazard family as the duplicate-pause bug. All four are genuinely `async` now, pinned by a
+> named test in two files.
+>
+> **The independent review pass found the privacy commitment was NOT actually enforced.** Five
+> bypasses were demonstrated *green* against a guard that had already been probed four times; all
+> five are now caught. In order of how likely they were to be hit by accident:
+> 1. **`kind` was a shape check, not a vocabulary.** `/^[a-z_]+$/` accepts `app_switch_chrome`,
+>    `discord`, `whatsapp` — nearly every app name slugs into it. The realistic failure was never
+>    malice: it is Phase 3's window watcher writing `` `app_switch_${slug(appName)}` ``, the most
+>    natural line of code someone will write, with every identity-shaped guard green. **`kind` is
+>    now a CLOSED SET** of the seven documented kinds.
+> 2. **Comment stripping hid real code from the scan** — a string containing `//` or `/*` erased a
+>    following `INSERT`. It failed *unsafely*. Stripping removed.
+> 3. **The reader exemption was an unconditional `continue`**, so the declared reader could INSERT.
+> 4. **The owner check was a one-word grep**, which a positional `INSERT INTO interruptions VALUES
+>    (?×11)` walks past — the 11th column IS the free-text one.
+> 5. **Only `<pkg>/src` was walked**, while Electron scaffolds put main/preload at
+>    `packages/app/electron/main.ts` — outside `src/`, and exactly where the window name lives.
+>
+> Also from the review: **`transaction()` silently lost atomicity for any async callback** (RELEASE
+> fires while the body is in flight, so a later throw never rolls back — and the Dart original is
+> literally `transaction(() async {…})`, so V3-B's natural port is the broken shape); **
+> `ActiveSession` immutability was not real** (`readonly` blocks reassigning a field, not mutating
+> the `Date` it points at); and a mutation harness found `elapsedMs` **sub-second precision was
+> asserted nowhere** — every assertion used whole minutes, while `elapsedMs` is what becomes
+> `actual_duration_s`. `schema.test.ts` now also asserts schema v1 declares **no triggers and no
+> views**: a trigger can write a table from inside the database, and a view lets a reader select
+> the data without ever naming it.
+>
+> **Two deliberate deviations from the Dart original, recorded not absorbed:** negative durations
+> clamp in `end()`/`resume()`/`totalPausedMs()` (Dart clamped only the crash path, so `logPause`
+> and the session writer disagreed about one pause); and a `Clock` is injected into every
+> repository, which makes the `updated_at` watermark assertable.
+>
+> **One CI failure, and the verification habit that caused it — the more durable lesson.** After
+> the review fixes, CI's `desktop` job failed while reporting **107 tests passed**: refusing an
+> async transaction callback abandoned a promise that then rejected with nothing listening, and
+> vitest exits non-zero on an unhandled rejection. It had already been failing locally. My check
+> was `npx vitest run … | grep -E "Tests "`, which hid the `Errors 1 error` line **and** replaced
+> vitest's exit code with grep's. Fixed by neutralising the orphan before throwing; re-verified by
+> capturing the real exit code at every step. **Never pipe a test run through a filter to decide
+> whether it passed.**
+>
+> **▶ DO THIS NEXT — V3-B: the Electron shell, IPC, and the two builds.**
+> 1. **Verify first whether Electron's bundled Node exposes `node:sqlite`.** Still unverified. If
+>    not, `better-sqlite3` is the fallback and **only `src/db/driver.ts` changes** — that is what
+>    the narrow driver interface bought.
+> 2. Main / preload / renderer; `nerdyapp.exe` binds SQLite on a **fresh** database,
+>    `nerdyapp-test.exe` binds in-memory fixtures and opens **no** database.
+> 3. `openDatabase({ schemaSql })` exists as the seam for getting `schema.sql` into a bundle —
+>    `core` has `noEmit` and reads it via `import.meta.url`, which a bundler will not carry.
+> 4. Port `backup.dart` (`VACUUM INTO`) once the save dialog exists.
+> **Do not re-litigate** the seven carried-over invariants in V3 spec §4.
+>
+> **Next-session execution:** **Hybrid** — inline by default, dedicated independent review on
+> correctness-critical work. It has now paid for itself four times; this session it caught a
+> privacy guarantee that was not actually holding, which four rounds of my own red-probing had
+> missed. **The lesson to carry: probing a guard red proves it catches the failure you thought of.
+> It says nothing about the failure you didn't.**
+> ---
+> ## ⏪ PREVIOUS (2026-07-27, "V3 pivot — Electron rewrite begins" session)
 >
 > **State:** branch **`feat/v4-electron-rewrite`** (pushed), one file uncommitted
 > (`docs/superpowers/specs/2026-07-27-v3-desktop-stack-change.md` — the fresh-database decision;
@@ -21,8 +120,10 @@
 >   runs on example data, verbose errors, for walking and debugging the UX without touching real
 >   study history. The seam: `core` exposes repository *interfaces*; the product binds SQLite, the
 >   test build binds in-memory fixtures. Same `ui` package either way.
-> - **Fresh database.** V3 does not open the V3 file (it holds 1 subject, 2 sessions — nothing worth
->   migrating). The old file stays on disk untouched.
+> - **Fresh database.** The Electron build does not open the existing Flutter-era `nerdyapp.db`
+>   (it holds 1 subject, 2 sessions — nothing worth migrating). The old file stays on disk
+>   untouched. *(Wording repaired after the V4→V3 relabel, which had left this sentence saying
+>   "V3 does not open the V3 file".)*
 > - **Flutter is retired, not deleted** → moved intact to **`app-flutter/`**, reference only. Its
 >   tests are the behavioural specification the port must reproduce.
 > - **Full rewrite in one pass** (Isaac chose this after the V1-failure risk was stated) and **the
@@ -419,6 +520,12 @@ Phases (from `docs/masterplan.md` §7, as re-sliced):
 - **V3 bootstrap** (`a60a867`, `ae37ff5`, 2026-07-25) — new repo, docs carried across, post-mortems
   written, environment facts recorded in masterplan §1a.
 
+- **V3-A — `core` in TypeScript** (PR #6, 2026-07-27, merged into `feat/v4-electron-rewrite`, **not
+  on `main`**) — full write-up in the LATEST block. npm workspace, `SqliteDriver` over
+  `node:sqlite`, `ActiveSession`, four repositories behind port interfaces, privacy guard, CI.
+  107 tests; 19 guards probed red; three-reviewer independent pass that found five live privacy
+  bypasses, a silent transaction-atomicity hole, and immutability that was not real.
+
 - **V3 pivot — stack change + foundations** (`b4cd16e`, `a695f8d`, `b63d016`, 2026-07-27, **unmerged**
   on `feat/v4-electron-rewrite`) — decision record, byte-faithful `schema.sql`, Flutter retired to
   `app-flutter/`, CI repointed. No application code yet.
@@ -439,7 +546,11 @@ Phases (from `docs/masterplan.md` §7, as re-sliced):
 - **Every mandated test must name the change that would make it fail** — and guards are *seen red*
   before being trusted. This caught real bugs three times this project.
 - Conventional Commits; GitHub Flow, squash PRs; README edits **require** a README-changelog row;
-  build iteration (now V3) ≠ release version (v0.1.0); `CLAUDE.md` is git-ignored by design.
+  **three distinct numbers** — build iteration `V3` ≠ release version `v0.*.*` ≠ plan id
+  `P<iteration><plan><slice>` (this slice's plan is `P31A`); `CLAUDE.md` is git-ignored by design.
+- **Ask the complementary question to every guard.** Probing red proves it catches the failure you
+  imagined. Also ask an independent party: "how would you defeat this *without* it going red?"
+  That question, and only that question, found the five live privacy bypasses in V3-A.
 - Mock/placeholder content lives in exactly one module and always renders inside a visible stamp;
   the UI never claims a capability the app lacks.
 
@@ -450,18 +561,18 @@ Phases (from `docs/masterplan.md` §7, as re-sliced):
 
 ## 🔜 Future slices (ordered)
 
-1. **V3-A — `core` in TypeScript (start here).** npm workspace under `desktop/`, TS strict, vitest;
-   port `ActiveSession` and the four repositories against `schema.sql`; vitest suite mirroring
-   `app-flutter/test/`. Reference sources: `app-flutter/lib/features/session/{domain,data}/` and
-   `app-flutter/lib/features/subjects/data/`. Deliverable: the correctness core proven in the new
-   stack with no UI at all.
-2. **V3-B — Electron shell + IPC + the two builds.** Main/preload/renderer; `nerdyapp.exe` binds
+1. **V3-B — Electron shell + IPC + the two builds (start here).** Main/preload/renderer; `nerdyapp.exe` binds
    SQLite (fresh database), `nerdyapp-test.exe` binds in-memory fixtures and opens no database.
    **Verify early whether Electron's bundled Node exposes `node:sqlite`**, else `better-sqlite3`.
-3. **V3-C — `ui` package: Modernist theme + the seven views**, ported from
+2. **V3-C — `ui` package: Modernist theme + the seven views**, ported from
    `app-flutter/lib/features/*/presentation/` and `core/theme/modernist.dart`. Design tokens are in
-   V3 spec §4.7 and the original bundle (`NerdyApp Study Companion Design.zip`).
-4. **V3-D — parity verification.** Re-earn the Phase 1/2 gates in Electron: the three Phase 2 exit
+   V3 spec §4.7 and the original bundle (`NerdyApp Study Companion Design.zip`). **Also owns two
+   things V3-A deferred in writing:** the `SessionController` port with its two mirror-ordering
+   race tests (invariant 4's *ordering* half — "clear state BEFORE the last await" — lives in the
+   controller, not the repository), and **decision V3-1: reactivity**. drift's `watch*` streams
+   became plain `list*`/`count*` queries, because every Flutter test consumed them with `.first`
+   and designing a change-notification bus with no UI to serve would have been guesswork.
+3. **V3-D — parity verification.** Re-earn the Phase 1/2 gates in Electron: the three Phase 2 exit
    criteria (with the interaction budget counted mechanically), crash recovery, and the one-hour
    wall-clock accuracy check. Replace the retired drift schema guards with a
    `schema.sql`-vs-live-database test.
@@ -469,9 +580,11 @@ Phases (from `docs/masterplan.md` §7, as re-sliced):
    now against Electron main-process APIs; inherits `idle_timeout` (`N` open), D2 (the ~10s
    threshold), and the first legitimate `detail` write.
 
-**Backlog / deferred (non-blocking):** `desktop/packages/lab` is a vestigial directory from an earlier
-reading of "two apps" — the second build is `test` (no database, example data), so rename or delete it;
-masterplan §3 decision 1 and §10 still need a row recording the stack change; README describes a Flutter
+**Backlog / deferred (non-blocking):** masterplan §3 decision 1 and §10 still need a row recording
+the stack change; `actions/checkout@v4` and `actions/setup-node@v4` target the deprecated Node 20 on
+runners (forced to 24 — non-blocking annotation, bump when convenient); consider
+`erasableSyntaxOnly: true` in `tsconfig.base.json` if anything ever needs to load `core` through
+plain `node` (parameter properties would have to go); README describes a Flutter
 app throughout and will need a rewrite (plus its required changelog row) once V3 runs;
 liveness heartbeat for unpaused-crash duration bound;
 `start()` double-tap orphan session (self-healing); README badge `TODO` (needs public repo); V1
@@ -489,6 +602,55 @@ Hybrid execution: inline by default, dedicated independent review on schema/migr
 confirming persistence is routed to Isaac, never claimed by an agent.
 
 ## ⚠️ Gotchas / hard-won lessons
+
+**V3-A / TypeScript stack (2026-07-27, verified this session):**
+
+- **Never pipe a test run through `grep` to check it.** `npx vitest run … | grep -E "Tests "` does
+  two harmful things at once: the filter hides failure lines that do not match (here, `Errors 1
+  error` and the `Unhandled Errors` banner), and the pipeline's exit code becomes **grep's**, not
+  the runner's. A suite that was already failing locally read as green four times and only broke on
+  CI. Capture the exit code explicitly (`cmd > log 2>&1; echo $?`) and grep the log afterwards.
+- **All tests passing is not the same as the run passing.** vitest exits non-zero on an unhandled
+  rejection while reporting `107 passed`. Anything that abandons a promise — including code that
+  deliberately refuses one — must attach a handler, or Node takes the process down elsewhere.
+- **A guard probed red proves it catches the failure you thought of — nothing more.** The privacy
+  guard was probed red four ways and still had five live bypasses, found only by an adversarial
+  reviewer asked "how would you leak identity *without* this going red?". Probing is necessary and
+  not sufficient; the complementary question has to be asked out loud.
+- **A validator's SHAPE is not its VOCABULARY.** `/^[a-z_]+$/` on `kind` read like a privacy
+  control and was not one: nearly every app name slugs into it. When a field exists to constrain
+  meaning, enumerate the allowed values.
+- **`readonly` is not immutability.** It blocks reassigning the field, not mutating the object the
+  field points at, and it is erased at runtime. Hold instants as epoch numbers, hand out copies,
+  and `Object.freeze` the instance. Dart's `final` + immutable `DateTime` gave this for free.
+- **A `Promise`-returning method must never throw synchronously.** `Promise.all([...])` and a bare
+  `.catch()` do not catch it. Mark the method `async` — that is what makes every failure a
+  rejection.
+- **`transaction(fn)` with a generic `T` silently accepts an `async fn`** and destroys atomicity:
+  `RELEASE` runs while the body is in flight. Refuse thenables at runtime, not only in the type.
+- **`node:sqlite` refuses to bind a JS boolean** ("Provided value cannot be bound to SQLite
+  parameter N"). Convert to 0/1; the `BindValue` type deliberately excludes `boolean` so it is a
+  compile error.
+- **`Math.trunc` returns `-0`** for anything in (-1000, 0), and `-0 !== 0` under `Object.is`, so a
+  test comparing to `0` fails while both print as "0". Normalise at the conversion boundary.
+- **ESLint 9's `eslint .` discovers js/mjs/cjs ONLY.** Without an explicit `files: ['**/*.ts']` the
+  entire TypeScript tree lints silently clean — an unfailable guard.
+- **`tsc --build` at a workspace root needs a root project.** Without one it exits 0 having checked
+  nothing. Fan the script out over workspaces instead.
+- **SQLite cannot nest `BEGIN`; `SAVEPOINT` can.** And `ROLLBACK TO` does not pop the savepoint —
+  it must be followed by `RELEASE`.
+- **`sqlite_master` guards that enumerate only tables and indexes are blind to triggers and views.**
+  A trigger writes a table from inside the database; a view lets a reader read it without naming
+  it, defeating any source scan keyed on the table name.
+- **NodeNext resolution needs `.js` extensions on relative imports** (vitest resolves them to
+  `.ts`). Chosen over `"bundler"` so plain `node`, `tsx`, vitest and any bundler all work.
+- **TypeScript parameter properties cannot be run by Node's native type stripping**
+  (`ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX`), and `core`'s `exports` points at raw `src/index.ts`. Fine
+  under vitest and any bundler; only bites if something loads the package through plain `node`.
+- **`git checkout --` cannot restore an UNTRACKED file**, so a probe harness that mutates a
+  brand-new file and "restores" it that way silently leaves the mutation in place and the following
+  probes report the previous one. Every probe needs an assertion that its edit applied and a
+  verified byte-identical restore.
 
 **V3 / environment (2026-07-27):**
 
