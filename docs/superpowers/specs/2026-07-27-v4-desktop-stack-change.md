@@ -77,6 +77,8 @@ Per Isaac's clarification (2026-07-27): **the test build does not connect to a d
 | Errors | minimal and handled: user-facing failures are surfaced quietly and recoverably, never a stack trace | verbose: unhandled errors surface loudly, devtools available |
 | Risk it removes | — | every UX experiment currently writes to the same real database the user's streak depends on |
 
+**The product starts on a FRESH database** (decided by Isaac, 2026-07-27). The existing `nerdyapp.db` holds one subject and two sessions from testing — nothing worth migrating — so V4 creates its own file rather than opening the V3 one. Consequences: no import path to build, no risk to the old file, and `schema.sql` is still ported byte-faithfully (§4.1) because the *schema* remains frozen even though the *data* does not carry over. The V3 database stays on disk untouched as a fallback.
+
 **This is the seam that makes it possible:** `core` exposes repository *interfaces*; the product binds them to SQLite, the test build binds them to an in-memory fixture implementation. Same `ui` package, same views, same design — only the binding differs. That also means the fixture implementation doubles as the test double for unit tests, and the renderer never learns which one it is talking to.
 
 The example data is the natural home for what `mock_data.dart` held in the Flutter app, and the honesty rule carries over: anything the fixtures show that the product cannot yet do stays visibly stamped.
