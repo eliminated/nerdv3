@@ -71,6 +71,88 @@ function createWindow(bindings: AppBindings): BrowserWindow {
   return win;
 }
 
+/**
+ * Drives a REAL session through the real UI, headlessly.
+ *
+ * "The window mounted" was all the previous smoke claimed, and it would have
+ * stayed green with every button broken. This clicks: create a subject → start
+ * → pause → resume → distraction → end → read history. It goes through the
+ * preload allowlist, IPC, the controller and the bound repositories, so it is
+ * the first check that exercises the whole stack in the direction a user does.
+ *
+ * It still cannot see. Whether the window LOOKS right stays on Isaac's manual
+ * list, and so does the real crash-recovery kill test — no scripted flow
+ * substitutes for pulling the power on a running process.
+ */
+async function runSmokeFlow(win: BrowserWindow): Promise<boolean> {
+  const js = (expr: string): Promise<unknown> => win.webContents.executeJavaScript(expr);
+  const settle = async (): Promise<void> => {
+    await new Promise((r) => setTimeout(r, 250));
+  };
+  const text = async (): Promise<string> => (await js('document.body.innerText')) as string;
+  const click = async (testId: string): Promise<void> => {
+    await js(`document.querySelector('[data-testid="${testId}"]').click()`);
+    await settle();
+  };
+
+  const failures: string[] = [];
+  const check = (name: string, ok: boolean, saw: string): void => {
+    if (!ok) failures.push(`${name} — saw: ${saw.replace(/\s+/g, ' ').slice(0, 160)}`);
+    console.log(`  ${ok ? 'PASS' : 'FAIL'}  ${name}`);
+  };
+
+  console.log('=== SMOKE FLOW ===');
+  const name = `Smoke ${String(Date.now())}`;
+
+  await js(
+    `(() => { const i = document.querySelector('[data-testid="subject-name"]');
+      i.value = ${JSON.stringify(name)};
+      i.dispatchEvent(new Event('input', { bubbles: true })); })()`,
+  );
+  await click('create-subject');
+  check('a subject can be created', (await text()).includes(name), await text());
+
+  await click(`start-${name}`);
+  check('a session starts', (await text()).includes('00:00:0'), await text());
+
+  const elapsedNow = async (): Promise<string> =>
+    (await js('document.querySelector(\'[data-testid="elapsed"]\').innerText')) as string;
+  const wait = async (ms: number): Promise<void> => {
+    await new Promise((r) => setTimeout(r, ms));
+  };
+
+  // The clock must actually ADVANCE. Without this the whole flow passes with
+  // `elapsed` hard-coded to zero — probed, and it did — because a sub-second
+  // smoke displays 00:00:00 either way.
+  await wait(1300);
+  check('the elapsed time advances', /00:00:0[1-9]/.test(await elapsedNow()), await elapsedNow());
+
+  await click('toggle-pause');
+  check('the session pauses', (await text()).includes('(paused)'), await text());
+
+  // ...and must FREEZE while paused. This is the assertion a tick counter
+  // cannot satisfy, which is the regression architecture.md §3.4 forbids.
+  const frozenAt = await elapsedNow();
+  await wait(1300);
+  check('the elapsed time freezes while paused', (await elapsedNow()) === frozenAt, await elapsedNow());
+
+  await click('toggle-pause');
+  check('the session resumes', !(await text()).includes('(paused)'), await text());
+
+  await click('self-report');
+  check('a distraction is recorded without error', !(await text()).includes('Error'), await text());
+
+  await click('end');
+  const after = await text();
+  check('the session appears in history', after.includes(name), after);
+  check('no session is running afterwards', after.includes('No session running.'), after);
+
+  console.log('=== RENDERER DOM ===');
+  console.log((await text()).trim());
+  for (const f of failures) console.log(`  ! ${f}`);
+  return failures.length === 0;
+}
+
 export function start(bindings: AppBindings): void {
   outRoot = bindings.outRoot;
   void app.whenReady().then(async () => {
@@ -115,20 +197,15 @@ export function start(bindings: AppBindings): void {
       // the keyboard — it proves the window loaded and Vue mounted, and nothing
       // about how it looks. The visual check stays on Isaac's manual list.
       await new Promise<void>((resolve) => win.webContents.once('did-finish-load', () => { resolve(); }));
-      const text = (await win.webContents.executeJavaScript(
-        'document.body.innerText',
-      )) as string;
-      console.log('=== RENDERER DOM ===');
-      console.log(text.trim());
-      const ok = text.includes('NerdyApp');
+      const ok = await runSmokeFlow(win);
       if (!ok) {
         const html = (await win.webContents.executeJavaScript(
           'document.documentElement.outerHTML',
         )) as string;
         console.log('=== OUTER HTML ===');
-        console.log(html.slice(0, 1500));
+        console.log(html.slice(0, 2000));
       }
-      console.log(ok ? '=== SMOKE PASS ===' : '=== SMOKE FAIL: renderer did not mount ===');
+      console.log(ok ? '=== SMOKE PASS ===' : '=== SMOKE FAIL ===');
       app.exit(ok ? 0 : 1);
       return;
     }
