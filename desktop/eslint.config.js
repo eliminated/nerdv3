@@ -40,16 +40,16 @@ export default tseslint.config(
     // Files outside every package tsconfig, so type-aware rules cannot run and
     // would CRASH rather than report: the config files themselves, and the
     // CommonJS Electron guard under scripts/.
-    files: ['**/*.config.{js,ts}', '**/*.cjs'],
+    files: ['**/*.config.{js,ts}', '**/*.cjs', '**/*.mjs'],
     extends: [tseslint.configs.disableTypeChecked],
   },
   {
-    // The Electron sqlite guard is deliberately CommonJS: it is loaded by
-    // Electron's main process directly, with no bundler and no TypeScript, so
-    // that verifying the runtime does not depend on the build working.
-    files: ['**/*.cjs'],
+    // The verification scripts are plain Node, outside every package tsconfig
+    // on purpose: whether the runtime works must not depend on the build
+    // working. The sqlite guard is CommonJS because Electron loads it directly;
+    // the build-isolation guard is ESM because it only reads files.
+    files: ['**/*.cjs', '**/*.mjs'],
     languageOptions: {
-      sourceType: 'commonjs',
       globals: {
         require: 'readonly',
         module: 'writable',
@@ -59,8 +59,13 @@ export default tseslint.config(
         console: 'readonly',
         process: 'readonly',
         Buffer: 'readonly',
+        URL: 'readonly',
       },
     },
     rules: { '@typescript-eslint/no-require-imports': 'off' },
+  },
+  {
+    files: ['**/*.cjs'],
+    languageOptions: { sourceType: 'commonjs' },
   },
 );

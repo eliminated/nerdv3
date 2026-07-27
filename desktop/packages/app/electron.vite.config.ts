@@ -22,9 +22,11 @@ export default defineConfig({
         // time by which bindings module the entry imports — never by an env var
         // read at runtime, which would put the fixture code inside the product
         // binary (plan P31B, decision B4).
+        // Output names say which executable they are. These become
+        // nerdyapp.exe and nerdyapp-test.exe when Phase 9 adds the installer.
         input: {
-          index: r('src/entry-product.ts'),
-          'index-test': r('src/entry-test.ts'),
+          nerdyapp: r('src/entry-product.ts'),
+          'nerdyapp-test': r('src/entry-test.ts'),
         },
       },
     },
