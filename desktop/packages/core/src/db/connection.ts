@@ -55,6 +55,16 @@ export function openDatabase(opts: { file?: string; schemaSql?: string } = {}): 
         // in flight while we are about to RELEASE. Roll back rather than
         // commit a transaction whose body has not finished.
         if (typeof (result as { then?: unknown } | null)?.then === 'function') {
+          // Neutralise the orphan before throwing. We are abandoning a promise
+          // that is still running, and when it settles nothing will be
+          // listening — an unhandled rejection takes the whole process down in
+          // Node, turning a clear misuse error into a crash somewhere else
+          // entirely. The callback's own failure is a consequence of the misuse
+          // we are about to report, so swallowing it loses nothing.
+          void (result as PromiseLike<unknown>).then(
+            () => undefined,
+            () => undefined,
+          );
           throw new TypeError(
             'transaction(fn) requires a SYNCHRONOUS callback: an async one returns ' +
               'before its work is done, so RELEASE would commit half-written state ' +
