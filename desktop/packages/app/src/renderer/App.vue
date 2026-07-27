@@ -107,6 +107,15 @@ const end = (): Promise<void> =>
 
 const selfReport = (): Promise<void> => guard(() => window.nerdy.logSelfReport());
 
+const backupStatus = ref<string | null>(null);
+const backup = (): Promise<void> =>
+  guard(async () => {
+    const path = await window.nerdy.backupDatabase();
+    // Cheap insurance: V1's primary failure was losing the database repeatedly
+    // (masterplan §1). The test build has nothing to back up and says so.
+    backupStatus.value = path === null ? 'Backup cancelled.' : `Backed up to ${path}`;
+  });
+
 const toggleDetail = (sessionId: string): Promise<void> =>
   guard(async () => {
     if (expanded.value === sessionId) {
@@ -149,6 +158,12 @@ onUnmounted(() => {
         <button data-testid="self-report" @click="selfReport()">Distracted</button>
         <button data-testid="end" @click="end()">End session</button>
       </div>
+    </section>
+
+    <section>
+      <h2>Database</h2>
+      <button data-testid="backup" @click="backup()">Back up the database</button>
+      <span v-if="backupStatus" data-testid="backup-status"> {{ backupStatus }}</span>
     </section>
 
     <section>

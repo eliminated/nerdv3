@@ -21,6 +21,7 @@ test('the allowlist is exactly the operations this build supports', () => {
   // Hand-written, sorted. An eleventh capability fails here until someone
   // deliberately edits this list — in front of a reviewer.
   expect([...CHANNELS]).toEqual([
+    'backupDatabase',
     'createSubject',
     'endSession',
     'getActiveSession',
@@ -42,6 +43,7 @@ test('main registers a handler for exactly the allowlisted channels', () => {
     },
     repositories: repos,
     controller: new SessionController(repos),
+    backup: null,
   });
   expect(registered.sort()).toEqual(CHANNELS.map(channelName).sort());
 });

@@ -7,9 +7,10 @@
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
-    "smoke": "electron-vite build && electron out/main/nerdyapp.js --smoke",
     "typecheck": "vue-tsc --noEmit",
     "test": "vitest run",
+    "smoke": "electron-vite build && electron out/main/nerdyapp.js --smoke",
+    "smoke:product": "electron out/main/nerdyapp.js --smoke",
     "smoke:test": "electron out/main/nerdyapp-test.js --smoke",
     "verify:builds": "node scripts/verify-build-isolation.mjs"
   },

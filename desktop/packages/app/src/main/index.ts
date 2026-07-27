@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 
 import type { Repositories } from '@nerdyapp/core';
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain } from 'electron';
 
 import { registerIpc } from './ipc.js';
 import { SessionController } from './session-controller.js';
@@ -41,10 +41,19 @@ export interface AppBindings {
    * happen before a window can exist, and neither of which is available at
    * module load.
    */
-  readonly open: () => { repositories: Repositories; close: () => void };
+  readonly open: () => {
+    repositories: Repositories;
+    close: () => void;
+    /** Present only on the product binding — the test build has nothing to back up. */
+    backupTo?: (targetPath: string) => void;
+  };
 }
 
 const isSmoke = process.argv.includes('--smoke');
+
+// CI runners have no usable GPU, and the resulting "GPU state invalid" churn is
+// noise at best and a hang at worst. Must be called before `whenReady`.
+if (isSmoke) app.disableHardwareAcceleration();
 
 function createWindow(bindings: AppBindings): BrowserWindow {
   const win = new BrowserWindow({
@@ -172,6 +181,22 @@ export function start(bindings: AppBindings): void {
       },
       repositories: opened.repositories,
       controller: new SessionController(opened.repositories),
+      backup:
+        opened.backupTo === undefined
+          ? null
+          : async () => {
+              const backupTo = opened.backupTo;
+              if (backupTo === undefined) return null;
+              const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+              const { canceled, filePath } = await dialog.showSaveDialog({
+                title: 'Back up the NerdyApp database',
+                defaultPath: `nerdyapp-backup-${stamp}.db`,
+                filters: [{ name: 'SQLite database', extensions: ['db'] }],
+              });
+              if (canceled || filePath === undefined) return null;
+              backupTo(filePath);
+              return filePath;
+            },
     });
 
     const win = createWindow(bindings);

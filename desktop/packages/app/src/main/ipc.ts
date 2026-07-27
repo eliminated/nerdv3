@@ -1,4 +1,4 @@
-import type { Repositories } from '@nerdyapp/core';
+import { DomainStateError, type Repositories } from '@nerdyapp/core';
 
 import { channelName, CHANNELS, type Channel, type IpcResult } from '../shared/ipc.js';
 import type { SessionController } from './session-controller.js';
@@ -13,6 +13,13 @@ export interface IpcRegistrar {
   on: (channel: string, handler: (...args: unknown[]) => Promise<unknown>) => void;
   repositories: Repositories;
   controller: SessionController;
+  /**
+   * Shows a save dialog and writes a snapshot, returning the chosen path or
+   * null if cancelled. Injected because it needs Electron's dialog — and
+   * because the TEST build has no database to back up, so it passes null and
+   * the channel refuses.
+   */
+  backup: (() => Promise<string | null>) | null;
 }
 
 /**
@@ -48,6 +55,13 @@ export function registerIpc(reg: IpcRegistrar): void {
     // Takes no argument at all: the renderer may say THAT the user was
     // distracted, and has no way to say by what.
     logSelfReport: () => controller.logSelfReport(),
+
+    backupDatabase: async () => {
+      if (reg.backup === null) {
+        throw new DomainStateError('this build has no database to back up');
+      }
+      return reg.backup();
+    },
 
     listHistory: () => repos.sessions.listHistory(),
     loadSessionDetail: (sessionId) => repos.sessions.loadSessionDetail(String(sessionId)),

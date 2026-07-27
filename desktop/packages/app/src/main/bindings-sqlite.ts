@@ -1,6 +1,7 @@
 import { mkdirSync } from 'node:fs';
 
 import {
+  backupDatabase,
   ensureLocalUser,
   openDatabase,
   SqliteInterruptionRepository,
@@ -21,6 +22,8 @@ export interface SqliteBinding {
   repositories: Repositories;
   databasePath: string;
   close: () => void;
+  /** Writes a consistent snapshot. Absent on the fixture binding by design. */
+  backupTo: (targetPath: string) => void;
 }
 
 /**
@@ -57,6 +60,9 @@ export function createSqliteBinding(appDataDir: string): SqliteBinding {
     },
     close: () => {
       db.close();
+    },
+    backupTo: (targetPath: string) => {
+      backupDatabase(db, targetPath);
     },
   };
 }

@@ -37,6 +37,9 @@ export function createApi(invoke: Invoke) {
   };
 
   return {
+    /** Opens a save dialog; resolves to the chosen path, or null if cancelled. */
+    backupDatabase: (): Promise<string | null> => call('backupDatabase'),
+
     listSubjects: (): Promise<SubjectRow[]> => call('listSubjects'),
     createSubject: (name: string): Promise<string> => call('createSubject', name),
 

@@ -20,6 +20,7 @@ export {
   type SqliteStatement,
 } from './db/driver.js';
 export { ensureLocalUser } from './db/local-user.js';
+export { backupDatabase } from './db/backup.js';
 
 export type {
   HistoryEntry,

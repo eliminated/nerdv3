@@ -15,6 +15,7 @@
  * (data-model.md §3.6) crosses the process boundary here for the first time.
  */
 export const CHANNELS = [
+  'backupDatabase',
   'createSubject',
   'endSession',
   'getActiveSession',
