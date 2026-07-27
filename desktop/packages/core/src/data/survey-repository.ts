@@ -1,6 +1,7 @@
 import type { Database } from '../db/connection.js';
 import { DomainStateError } from '../errors.js';
 import { newId } from '../ids.js';
+import { withTranslatedErrors } from '../db/sqlite-errors.js';
 import { toEpochSeconds } from '../time.js';
 import type { SurveyRepository } from './ports.js';
 import { assertFocusRating, assertRating, SURVEYABLE_END_REASONS } from './rules.js';
@@ -79,23 +80,27 @@ export class SqliteSurveyRepository implements SurveyRepository {
       }
 
       const ts = toEpochSeconds(this.now());
-      this.db
-        .prepare(
-          `INSERT INTO session_surveys
+      // Translated: a second survey for one session must fail as the same typed
+      // error in both bindings, since `kind` crosses IPC to the renderer.
+      withTranslatedErrors(() =>
+        this.db
+          .prepare(
+            `INSERT INTO session_surveys
              (id, session_id, focus_rating, comprehension_rating, difficulty_rating,
               note, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        )
-        .run(
-          newId(),
-          a.sessionId,
-          a.focusRating,
-          a.comprehensionRating ?? null,
-          a.difficultyRating ?? null,
-          trimmed === '' ? null : trimmed,
-          ts,
-          ts,
-        );
+          )
+          .run(
+            newId(),
+            a.sessionId,
+            a.focusRating,
+            a.comprehensionRating ?? null,
+            a.difficultyRating ?? null,
+            trimmed === '' ? null : trimmed,
+            ts,
+            ts,
+          ),
+      );
     });
   }
 }

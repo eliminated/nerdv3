@@ -123,6 +123,50 @@ test('a racing pause cannot resurrect an ended session', async () => {
   expect(history[0]?.endReason).toBe('user_ended');
 });
 
+test('RACE: end() then start() does not hand back the ENDED session', async () => {
+  // start() has no post-await recheck, so while end() was suspended inside
+  // sessions.end() the controller still held the finished session and start()
+  // returned its snapshot. The renderer assigns that to `session`, showing a
+  // ticking clock for a session the controller no longer owns; the next
+  // togglePause returns null and logSelfReport records nothing.
+  const first = await ctl.start(subjectId);
+  advance(10);
+  const [, second] = await Promise.all([ctl.end(), ctl.start(subjectId)]);
+  expect(second.id, 'a new session, not the one just ended').not.toBe(first.id);
+  expect(ctl.snapshot()?.id).toBe(second.id);
+});
+
+test('RACE: start() then end() leaves a usable controller (the mirror)', async () => {
+  const first = await ctl.start(subjectId);
+  advance(10);
+  const [second] = await Promise.all([ctl.start(subjectId), ctl.end()]);
+  // Either the second start won the empty slot or it returned the live session;
+  // what must NOT happen is the controller holding a session that has ended.
+  const held = ctl.snapshot();
+  if (held !== null) expect(held.id).not.toBe(first.id);
+  expect(second).toBeDefined();
+});
+
+test('RACE: end() then logSelfReport() does not log against an ended session', async () => {
+  // logSessionEvent is the only session-scoped write with no ended_at guard, so
+  // a report landing after the closing write would attach to a finished session.
+  const s = await ctl.start(subjectId);
+  advance(10);
+  await Promise.all([ctl.end(), ctl.logSelfReport()]);
+  expect(await repos.interruptions.countSelfReports(s.id)).toBe(0);
+});
+
+test('RACE: logSelfReport() then end() also logs nothing after the close (mirror)', async () => {
+  const s = await ctl.start(subjectId);
+  advance(10);
+  await Promise.all([ctl.logSelfReport(), ctl.end()]);
+  // The report either lands before the close or not at all — never after.
+  const count = await repos.interruptions.countSelfReports(s.id);
+  expect(count).toBeLessThanOrEqual(1);
+  const history = await repos.sessions.listHistory();
+  expect(history[0]?.endReason).toBe('user_ended');
+});
+
 // --- state and timing -------------------------------------------------------
 
 test('the snapshot round-trips through the IPC-shaped value', async () => {

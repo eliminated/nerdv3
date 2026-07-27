@@ -95,6 +95,23 @@ export class SessionController {
     const s = this.current;
     if (s === null) return;
     const now = this.now();
+
+    // CLEARED BEFORE THE FIRST AWAIT, not between the two.
+    //
+    // The earlier shape cleared only after `sessions.end()` resolved, which
+    // left a window where the controller still held a live session while its
+    // ending was already in flight. `start()` and `logSelfReport()` have no
+    // post-await recheck, so an independent review traced two orderings through
+    // that window: end+start returned the ENDED session's snapshot to the
+    // renderer, which then showed a ticking clock for a session the controller
+    // no longer held; and end+logSelfReport appended an interruption to a
+    // session whose `ended_at` was already written — `logSessionEvent` is the
+    // one session-scoped write with no `ended_at IS NULL` guard.
+    //
+    // Ending is terminal, so there is nothing to restore on failure: anything
+    // arriving from here on must see no session, which is the truth.
+    this.current = null;
+
     await this.repos.sessions.end({
       id: s.id,
       endedAt: now,
@@ -102,22 +119,11 @@ export class SessionController {
       totalPausedMs: s.totalPausedMs(now),
     });
 
-    // Whether an open pause still needs logging is decided from LIVE state,
-    // never from the snapshot captured before the await: a resume that won the
-    // race has already logged this pause while `s.isPaused` still reads true,
-    // which would append a duplicate row for one pause.
-    const live = this.current;
-    if (live === null || live.id !== s.id) return;
-
-    // CLEARED BEFORE THE AWAIT BELOW. While this method is suspended inside the
-    // insert, any other handler reaching its own post-await continuation would
-    // still see a paused session and log the same pause again — End-then-Resume,
-    // or a second End. Clearing first also means a throwing insert cannot leave
-    // the controller wedged on an already-ended session.
-    this.current = null;
-
-    const pauseStartedAt = live.pauseStartedAt;
-    if (live.isPaused && pauseStartedAt !== null) {
+    // A racing resume cannot have logged this pause: its own post-await recheck
+    // sees `current` no longer identical to its snapshot and returns without
+    // writing. So exactly one of the two logs it, and it is this one.
+    const pauseStartedAt = s.pauseStartedAt;
+    if (s.isPaused && pauseStartedAt !== null) {
       await this.repos.interruptions.logPause({
         sessionId: s.id,
         pauseStartedAt,

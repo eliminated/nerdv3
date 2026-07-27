@@ -53,13 +53,25 @@ test('the preload object exposes exactly the allowlisted operations', () => {
   expect(Object.keys(api).sort()).toEqual([...CHANNELS].sort());
 });
 
-test('no channel name accepts a free-text field that could carry app identity', () => {
+test('no channel name accepts a free-text field that could carry app identity', async () => {
   // The privacy line crosses the process boundary here for the first time
   // (data-model.md §3.6). The renderer may say THAT the user was distracted;
   // it has no way to say by what — `logSelfReport` takes no argument at all,
   // and no channel forwards a caller-supplied `kind`.
-  const api = createApi(() => Promise.resolve({ ok: true, value: null }));
-  expect(api.logSelfReport.length, 'logSelfReport must take no arguments').toBe(0);
+  // Behavioural, not `Function.length`: a rest-parameter refactor
+  // (`(...args) => call('logSelfReport', ...args)`) has length 0 and would have
+  // left the previous version of this test green while forwarding anything.
+  const seen: unknown[][] = [];
+  const api = createApi((channel, ...args) => {
+    seen.push([channel, ...args]);
+    return Promise.resolve({ ok: true, value: null });
+  });
+  // Cast the FUNCTION, not the argument: the signature already takes none, and
+  // the point is to prove that even a caller who forces one through cannot get
+  // it forwarded.
+  const forced: (...a: unknown[]) => Promise<void> = api.logSelfReport;
+  await forced('app_switch_chrome');
+  expect(seen[0], 'nothing may ride along with a self report').toEqual(['nerdy:logSelfReport']);
   expect(CHANNELS).not.toContain('logSessionEvent');
   expect(CHANNELS).not.toContain('logAppSwitch');
 });

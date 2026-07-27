@@ -10,9 +10,15 @@
  * Adding a capability means editing this list, which fails `ipc-surface.test.ts`
  * until the test is edited too — so it cannot happen quietly.
  *
- * NOTE what is absent and must stay absent: nothing here accepts free-form text
- * that could carry an application name or window title. The privacy line
- * (data-model.md §3.6) crosses the process boundary here for the first time.
+ * PRIVACY, stated precisely — an earlier version of this comment overclaimed.
+ * What holds is narrower and is the thing that matters: no channel can put app
+ * identity into the INTERRUPTION LOG. `logSelfReport` takes no argument, no
+ * channel forwards a caller-supplied `kind`, and `detail` is written by nothing.
+ * That is the guarantee of data-model.md §3.6, and it crosses the process
+ * boundary here for the first time.
+ *
+ * `createSubject` DOES accept free text — it is a subject name the user types —
+ * so it is validated and bounded in core's `rules.ts` rather than trusted.
  */
 export const CHANNELS = [
   'backupDatabase',

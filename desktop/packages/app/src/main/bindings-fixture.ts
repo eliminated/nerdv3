@@ -16,7 +16,13 @@ import { ActiveSession, createFixtureRepositories, type Repositories } from '@ne
 export function createFixtureBinding(): { repositories: Repositories; close: () => void } {
   const repos = createFixtureRepositories();
 
-  void seed(repos);
+  // Not fire-and-forget: a throwing seed previously left the store half
+  // populated — three subjects, one ended session, no surveys — and became an
+  // unhandled rejection, which Node turns into an uncaught exception. The demo
+  // build showing a silently incomplete dataset is worse than it failing loudly.
+  void seed(repos).catch((error: unknown) => {
+    console.error('[nerdyapp-test] example data failed to load:', error);
+  });
 
   return { repositories: repos, close: () => undefined };
 }

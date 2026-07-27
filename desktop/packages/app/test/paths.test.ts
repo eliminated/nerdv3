@@ -1,5 +1,7 @@
 import { expect, test } from 'vitest';
 
+import { dirname, sep } from 'node:path';
+
 import {
   DATABASE_FILENAME,
   flutterEraDatabasePath,
@@ -21,10 +23,14 @@ test('the V3 directory is not a parent or child of the Flutter one either', () =
   // Not the same string is too weak: nesting one inside the other would still
   // put the two apps' files in each other's way, and a delete-all in either
   // would take both.
+  // `dirname` and `sep`, not a hard-coded backslash. The previous version
+  // stripped a literal "\nerdyapp.db", so on a POSIX runner it matched nothing,
+  // the filename stayed on the end, and BOTH assertions became trivially true.
+  // It was real only because CI happens to pin windows-latest.
   const v3 = resolveUserDataDir(APPDATA);
-  const flutter = flutterEraDatabasePath(APPDATA).replace(`\\${DATABASE_FILENAME}`, '');
-  expect(v3.startsWith(`${flutter}\\`), 'V3 must not sit inside the Flutter dir').toBe(false);
-  expect(flutter.startsWith(`${v3}\\`), 'Flutter must not sit inside the V3 dir').toBe(false);
+  const flutter = dirname(flutterEraDatabasePath(APPDATA));
+  expect(v3.startsWith(flutter + sep), 'V3 must not sit inside the Flutter dir').toBe(false);
+  expect(flutter.startsWith(v3 + sep), 'Flutter must not sit inside the V3 dir').toBe(false);
 });
 
 test('the database sits under the app-data directory it was given', () => {

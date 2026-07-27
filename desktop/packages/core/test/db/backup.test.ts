@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -110,4 +110,37 @@ test('a backup taken later does not contain rows added after it', async () => {
   } finally {
     restored.close();
   }
+});
+
+test('a FAILED backup leaves the previous good backup intact', async () => {
+  // The ordering that matters, and the one case the original tests did not
+  // cover. Deleting the target before vacuuming inverted this function's whole
+  // guarantee: a full disk mid-write left the user with an error dialog and no
+  // backup at all, having destroyed last week's copy to get there.
+  await new SqliteSubjectRepository(db).create({ name: 'Physics' });
+  const target = join(dir, 'backup.db');
+  backupDatabase(db, target);
+  const good = readFileSync(target);
+  expect(good.length).toBeGreaterThan(0);
+
+  // Force the vacuum to fail: a directory cannot be written as a file, and the
+  // temporary sibling is what SQLite is asked to create.
+  mkdirSync(`${target}.incomplete`);
+  expect(() => {
+    backupDatabase(db, target);
+  }).toThrow();
+
+  expect(existsSync(target), 'the previous backup must survive a failed write').toBe(true);
+  expect(readFileSync(target).equals(good), 'and be byte-identical').toBe(true);
+});
+
+test('a failed backup leaves no half-written file wearing a plausible name', () => {
+  const target = join(dir, 'backup.db');
+  mkdirSync(`${target}.incomplete`);
+  expect(() => {
+    backupDatabase(db, target);
+  }).toThrow();
+  // The directory we planted is still there; what must not appear is a
+  // truncated .db that looks like a real backup.
+  expect(existsSync(target)).toBe(false);
 });

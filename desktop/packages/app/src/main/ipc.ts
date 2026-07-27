@@ -1,6 +1,6 @@
 import { DomainStateError, type Repositories } from '@nerdyapp/core';
 
-import { channelName, CHANNELS, type Channel, type IpcResult } from '../shared/ipc.js';
+import { channelName, type Channel, type IpcResult } from '../shared/ipc.js';
 import type { SessionController } from './session-controller.js';
 
 /**
@@ -67,9 +67,17 @@ export function registerIpc(reg: IpcRegistrar): void {
     loadSessionDetail: (sessionId) => repos.sessions.loadSessionDetail(String(sessionId)),
   };
 
-  // Driven off CHANNELS rather than off `handlers`, so a handler that is not on
-  // the allowlist is simply never registered — the list is the authority.
-  for (const channel of CHANNELS) {
+  // Driven off `handlers`, NOT off CHANNELS.
+  //
+  // Iterating CHANNELS made the surface test unfalsifiable: `registered` was
+  // then `CHANNELS.map(channelName)` by construction, so deleting a handler
+  // left the test green and the channel merely threw "handler is not a
+  // function" at runtime. Driving off the object means a missing handler is a
+  // missing registration, which the test can actually see.
+  //
+  // `Record<Channel, …>` still makes an unlisted key a compile error, so the
+  // allowlist remains the authority on what MAY exist.
+  for (const channel of Object.keys(handlers) as Channel[]) {
     const handler = handlers[channel];
     reg.on(channelName(channel), (...args: unknown[]) => settle(() => handler(...args)));
   }

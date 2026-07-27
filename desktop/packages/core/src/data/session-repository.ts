@@ -3,6 +3,7 @@ import type { ActiveSession } from '../domain/active-session.js';
 import { localUserId } from '../ids.js';
 import { fromEpochSeconds, msToSeconds, toEpochSeconds } from '../time.js';
 import type { HistoryEntry, SessionDetailView, SessionRepository } from './ports.js';
+import { withTranslatedErrors } from '../db/sqlite-errors.js';
 
 interface RawSurvey {
   focus_rating: number;
@@ -22,6 +23,7 @@ interface RawHistory {
   subject_name: string;
   started_at: number;
   actual_duration_s: number | null;
+  paused_duration_s: number;
   end_reason: string | null;
 }
 
@@ -40,13 +42,15 @@ export class SqliteSessionRepository implements SessionRepository {
 
   async insertStarted(s: ActiveSession): Promise<void> {
     const ts = toEpochSeconds(this.now());
-    this.db
-      .prepare(
-        `INSERT INTO sessions
+    withTranslatedErrors(() =>
+      this.db
+        .prepare(
+          `INSERT INTO sessions
            (id, user_id, subject_id, mode, started_at, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .run(s.id, localUserId, s.subjectId, s.mode, toEpochSeconds(s.startedAt), ts, ts);
+        )
+        .run(s.id, localUserId, s.subjectId, s.mode, toEpochSeconds(s.startedAt), ts, ts),
+    );
     return;
   }
 
@@ -147,7 +151,7 @@ export class SqliteSessionRepository implements SessionRepository {
     const rows = this.db
       .prepare(
         `SELECT s.id, sub.name AS subject_name, s.started_at,
-                s.actual_duration_s, s.end_reason
+                s.actual_duration_s, s.paused_duration_s, s.end_reason
            FROM sessions s
            JOIN subjects sub ON sub.id = s.subject_id
           WHERE s.deleted_at IS NULL AND s.ended_at IS NOT NULL
@@ -159,6 +163,7 @@ export class SqliteSessionRepository implements SessionRepository {
       subjectName: r.subject_name,
       startedAt: fromEpochSeconds(r.started_at),
       actualDurationS: r.actual_duration_s ?? 0,
+      pausedDurationS: r.paused_duration_s,
       endReason: r.end_reason,
     }));
   }

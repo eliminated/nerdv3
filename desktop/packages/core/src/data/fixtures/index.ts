@@ -17,6 +17,7 @@ import {
   assertKind,
   assertRating,
   KIND_MANUAL_PAUSE,
+  normaliseSubjectName,
   KIND_SELF_REPORTED,
   pauseSpanSeconds,
   SURVEYABLE_END_REASONS,
@@ -108,11 +109,12 @@ export class FixtureSubjectRepository implements SubjectRepository {
     source?: string;
     sourceName?: string | null;
   }): Promise<string> {
+    const name = normaliseSubjectName(a.name);
     const id = newId();
     const ts = secs(this.now());
     this.store.subjects.push({
       id,
-      name: a.name,
+      name,
       color: a.color ?? null,
       source: a.source ?? 'self',
       sourceName: a.sourceName ?? null,
@@ -130,7 +132,7 @@ export class FixtureSubjectRepository implements SubjectRepository {
   ): Promise<void> {
     const s = this.store.subjects.find((r) => r.id === id);
     if (s === undefined) return;
-    s.name = a.name;
+    s.name = normaliseSubjectName(a.name);
     s.color = a.color;
     s.source = a.source;
     s.sourceName = a.sourceName;
@@ -176,6 +178,17 @@ export class FixtureSessionRepository implements SessionRepository {
   ) {}
 
   async insertStarted(s: ActiveSession): Promise<void> {
+    // The two constraints SQLite enforces on this insert. Without them the
+    // fixture accepted an unknown subject (producing a history row with a blank
+    // name where SQL's INNER JOIN would have produced no row at all) and a
+    // duplicate session id (which, after recovery, yielded TWO history rows for
+    // one id — one `user_ended`, one `crashed`). Both were measured.
+    if (!this.store.subjects.some((sub) => sub.id === s.subjectId)) {
+      throw new DomainStateError(`FOREIGN KEY constraint failed: no subject ${s.subjectId}`);
+    }
+    if (this.store.sessions.some((r) => r.id === s.id)) {
+      throw new DomainStateError(`UNIQUE constraint failed: sessions.id (${s.id})`);
+    }
     const ts = secs(this.now());
     this.store.sessions.push({
       id: s.id,
@@ -244,6 +257,7 @@ export class FixtureSessionRepository implements SessionRepository {
         subjectName: this.store.subjects.find((sub) => sub.id === s.subjectId)?.name ?? '',
         startedAt: toDate(s.startedAtS),
         actualDurationS: s.actualDurationS ?? 0,
+        pausedDurationS: s.pausedDurationS,
         endReason: s.endReason,
       }));
   }

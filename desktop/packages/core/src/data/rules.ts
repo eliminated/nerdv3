@@ -76,6 +76,36 @@ export function assertDurationS(durationS: number | null | undefined): void {
 }
 
 /**
+ * A subject name is user-authored free text, so it is bounded rather than
+ * trusted. Without this, the IPC boundary coerced whatever the renderer sent
+ * with `String(...)`: `createSubject()` stored a subject literally named
+ * "undefined", `createSubject({})` stored "[object Object]", and a 50 MB string
+ * was accepted and then structured-cloned back on every subsequent list —
+ * with no UI to delete any of it.
+ *
+ * Shared, so the fixture binding refuses exactly what the product refuses.
+ */
+const MAX_SUBJECT_NAME = 200;
+
+export function normaliseSubjectName(name: unknown): string {
+  if (typeof name !== 'string') {
+    throw new ValidationError(`a subject name must be text, got ${typeof name}`);
+  }
+  const trimmed = name.trim();
+  if (trimmed === '') {
+    throw new ValidationError('a subject name cannot be empty');
+  }
+  if (trimmed.length > MAX_SUBJECT_NAME) {
+    throw new ValidationError(
+      `a subject name must be at most ${String(MAX_SUBJECT_NAME)} characters, got ${String(
+        trimmed.length,
+      )}`,
+    );
+  }
+  return trimmed;
+}
+
+/**
  * Both normal endings. Only `'crashed'` is refused: a crashed session's
  * duration is a lower-bound estimate, so letting one carry a rating would drag
  * a legitimately good day below Phase 5's 3.0 threshold (data-model.md §5.1).

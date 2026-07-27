@@ -37,10 +37,14 @@ function reachableFrom(entryRelative: string): Set<string> {
     if (seen.has(file) || !existsSync(file)) return;
     seen.add(file);
     const source = readFileSync(file, 'utf8');
-    // Covers `import … from 'x'`, bare `import 'x'`, and `export … from 'x'`.
-    const specifiers = [...source.matchAll(/(?:from|import)\s*['"]([^'"]+)['"]/g)].map(
-      (m) => m[1] ?? '',
-    );
+    // Static `import … from`, bare `import 'x'`, `export … from`, AND the
+    // dynamic forms. The previous pattern saw only the static ones, so
+    // `await import('./bindings-fixture.js')` behind an env-var check — which
+    // is precisely the shape decision B4 exists to forbid — walked past every
+    // assertion in this file.
+    const specifiers = [
+      ...source.matchAll(/(?:from|import|require)\s*\(?\s*['"]([^'"]+)['"]/g),
+    ].map((m) => m[1] ?? '');
     for (const spec of specifiers) {
       if (!spec.startsWith('.')) continue;
       const base = join(dirname(file), spec).replace(/\.js$/, '');
@@ -80,6 +84,21 @@ test('the TEST entry cannot reach the SQLite bindings', () => {
   );
   expect(reached).toContain('main/bindings-fixture.ts');
   expect(reached.length).toBeGreaterThan(4);
+});
+
+test('the product entry never MENTIONS the fixture factory either', () => {
+  // Path-based exclusion is not enough on its own: a new `main/bindings-demo.ts`
+  // calling createFixtureRepositories() and imported by the product entry would
+  // pass every path assertion above. This keys on the behaviour instead.
+  for (const file of reachableFrom('entry-product.ts')) {
+    const source = readFileSync(file, 'utf8');
+    expect(
+      /createFixtureRepositories|Fixture(?:Subject|Session|Survey|Interruption)Repository/.test(
+        source,
+      ),
+      `${file.slice(SRC.length + 1)} must not build fixture repositories`,
+    ).toBe(false);
+  }
 });
 
 test('neither entry reaches the other', () => {

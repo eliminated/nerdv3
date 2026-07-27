@@ -1,4 +1,4 @@
-import { existsSync, rmSync } from 'node:fs';
+import { existsSync, renameSync, rmSync } from 'node:fs';
 
 import type { Database } from './connection.js';
 
@@ -18,6 +18,26 @@ import type { Database } from './connection.js';
  * repeatedly to schema churn (masterplan §1).
  */
 export function backupDatabase(db: Database, targetPath: string): void {
-  if (existsSync(targetPath)) rmSync(targetPath);
-  db.prepare('VACUUM INTO ?').run(targetPath);
+  // Vacuum to a temporary sibling, THEN replace. The previous shape deleted the
+  // target first and vacuumed straight onto it, which inverted the guarantee
+  // this function exists for: a failure part-way — a full disk is the obvious
+  // one — left the user with no backup at all, having destroyed the last good
+  // one to get there.
+  //
+  // A sibling rather than the OS temp directory, so the rename stays on one
+  // filesystem and is therefore atomic.
+  const temporary = `${targetPath}.incomplete`;
+  if (existsSync(temporary)) rmSync(temporary, { force: true });
+
+  try {
+    db.prepare('VACUUM INTO ?').run(temporary);
+  } catch (error) {
+    // Leave no half-written file wearing a plausible name.
+    if (existsSync(temporary)) rmSync(temporary, { force: true });
+    throw error;
+  }
+
+  // Overwrites on both Windows and POSIX, so the previous backup survives right
+  // up until a complete replacement exists.
+  renameSync(temporary, targetPath);
 }

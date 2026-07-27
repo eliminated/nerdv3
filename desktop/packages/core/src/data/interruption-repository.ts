@@ -1,5 +1,6 @@
 import type { Database } from '../db/connection.js';
 import { newId } from '../ids.js';
+import { withTranslatedErrors } from '../db/sqlite-errors.js';
 import { toEpochSeconds } from '../time.js';
 import type { InterruptionRepository } from './ports.js';
 import {
@@ -57,22 +58,28 @@ export class SqliteInterruptionRepository implements InterruptionRepository {
     assertKind(a.kind);
     assertDurationS(a.durationS);
     const ts = toEpochSeconds(this.now());
-    this.db
-      .prepare(
-        `INSERT INTO interruptions
+    // Translated so an unknown session id fails as the SAME typed error the
+    // fixture binding throws. `kind` crosses IPC into the renderer, and a
+    // branch written while debugging on the test build must behave identically
+    // against the product.
+    withTranslatedErrors(() =>
+      this.db
+        .prepare(
+          `INSERT INTO interruptions
            (id, session_id, kind, occurred_at, duration_s, blocked, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .run(
-        newId(),
-        a.sessionId,
-        a.kind,
-        toEpochSeconds(a.occurredAt),
-        a.durationS ?? null,
-        a.blocked === true ? 1 : 0,
-        ts,
-        ts,
-      );
+        )
+        .run(
+          newId(),
+          a.sessionId,
+          a.kind,
+          toEpochSeconds(a.occurredAt),
+          a.durationS ?? null,
+          a.blocked === true ? 1 : 0,
+          ts,
+          ts,
+        ),
+    );
     return;
   }
 

@@ -1,7 +1,9 @@
 import { mkdirSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 import {
   backupDatabase,
+  DomainStateError,
   ensureLocalUser,
   openDatabase,
   SqliteInterruptionRepository,
@@ -62,6 +64,15 @@ export function createSqliteBinding(appDataDir: string): SqliteBinding {
       db.close();
     },
     backupTo: (targetPath: string) => {
+      // The save dialog lets the user navigate anywhere, including straight to
+      // the live file. On POSIX that would unlink the database out from under
+      // an open connection: sessions logged afterwards would go to an orphaned
+      // inode and vanish on next launch.
+      if (resolve(targetPath) === resolve(databasePath)) {
+        throw new DomainStateError(
+          'the backup target cannot be the live database — choose another file',
+        );
+      }
       backupDatabase(db, targetPath);
     },
   };
