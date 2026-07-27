@@ -1,7 +1,10 @@
 import { join } from 'node:path';
 
 import type { Repositories } from '@nerdyapp/core';
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, ipcMain } from 'electron';
+
+import { registerIpc } from './ipc.js';
+import { SessionController } from './session-controller.js';
 
 /**
  * Where the built `out/` directory is, supplied BY THE ENTRY FILE.
@@ -77,6 +80,16 @@ export function start(bindings: AppBindings): void {
     const opened = bindings.open();
     app.on('will-quit', () => {
       opened.close();
+    });
+
+    // Registered BEFORE the window exists, so the renderer cannot invoke a
+    // channel that has no handler yet.
+    registerIpc({
+      on: (channel, handler) => {
+        ipcMain.handle(channel, (_event, ...args: unknown[]) => handler(...args));
+      },
+      repositories: opened.repositories,
+      controller: new SessionController(opened.repositories),
     });
 
     const win = createWindow(bindings);

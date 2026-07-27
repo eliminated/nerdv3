@@ -1,25 +1,18 @@
-import { contextBridge } from 'electron';
+import { contextBridge, ipcRenderer } from 'electron';
+
+import { createApi } from './api.js';
 
 /**
- * THE REVIEWABLE SURFACE.
+ * The only place the renderer is handed anything.
  *
- * Everything the renderer can do lives in this one file, enumerated by hand.
- * There is deliberately no generic `invoke(name, args)`: a dispatcher would let
- * a compromised renderer reach anything registered in the main process, and it
- * would make the privacy surface impossible to review at a glance
- * (plan P31B, decision B2).
+ * `contextIsolation` is on and `sandbox` is on, so this bridge is the entire
+ * attack surface between a web page and the user's study database. The object
+ * is built in `./api.ts`, which is plain and testable — `ipc-surface.test.ts`
+ * asserts its keys are exactly the allowlist in `../shared/ipc.ts`.
  *
- * Task 4 fills this with the ten allowlisted operations, each pinned by a
- * surface test that fails when an eleventh appears.
+ * Note this file exposes no `ipcRenderer`, no `require`, and no generic invoke.
  */
-const api = {
-  versions: {
-    electron: process.versions.electron,
-    node: process.versions.node,
-    chrome: process.versions.chrome,
-  },
-} as const;
-
-export type NerdyApi = typeof api;
-
-contextBridge.exposeInMainWorld('nerdy', api);
+contextBridge.exposeInMainWorld(
+  'nerdy',
+  createApi((channel, ...args) => ipcRenderer.invoke(channel, ...args)),
+);

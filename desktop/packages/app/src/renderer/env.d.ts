@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 
-import type { NerdyApi } from '../preload/index.js';
+import type { NerdyApi } from '../preload/api.js';
 
 // `declare global` rather than a bare declaration: this file has imports, so it
 // is a module, and an unqualified `interface Window` here would augment nothing.

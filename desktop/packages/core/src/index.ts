@@ -7,7 +7,7 @@
  * unchanged.
  */
 
-export { ActiveSession } from './domain/active-session.js';
+export { ActiveSession, type ActiveSessionSnapshot } from './domain/active-session.js';
 export { DomainStateError, ValidationError } from './errors.js';
 export { localUserId, newId } from './ids.js';
 export { fromEpochSeconds, msToSeconds, toEpochSeconds } from './time.js';
