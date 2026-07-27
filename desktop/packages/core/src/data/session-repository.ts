@@ -86,8 +86,13 @@ export class SqliteSessionRepository implements SessionRepository {
       )
       .run(
         toEpochSeconds(a.endedAt),
-        msToSeconds(a.actualDurationMs),
-        msToSeconds(a.totalPausedMs),
+        // Clamped, like crash recovery and logPause. DELIBERATE DEVIATION from
+        // the Dart original, which wrote these unclamped: the wall clock is not
+        // monotonic, ActiveSession.elapsedMs is specified to go negative when it
+        // steps backwards, and a negative actual_duration_s would flow straight
+        // into the qualified-day inputs of data-model.md §5.1.
+        Math.max(0, msToSeconds(a.actualDurationMs)),
+        Math.max(0, msToSeconds(a.totalPausedMs)),
         toEpochSeconds(this.now()),
         a.id,
       );

@@ -12,8 +12,30 @@ export const KIND_MANUAL_PAUSE = 'manual_pause';
 export const KIND_SELF_REPORTED = 'self_reported';
 
 /**
- * focus-enforcement.md §7's vocabulary is bare lowercase tokens. Anchored at
- * both ends and with no `*`, so the empty string is refused too.
+ * The CLOSED vocabulary of focus-enforcement.md §7. A closed set, not a shape
+ * check, because a shape check is not a privacy control:
+ * `/^[a-z_]+$/` accepts `app_switch_chrome`, `discord`, `whatsapp` — nearly
+ * every application name slugs into it. The realistic accident is not malice,
+ * it is Phase 3's window watcher writing
+ * `kind: \`app_switch_${slug(appName)}\`` and every identity-shaped guard
+ * staying green.
+ *
+ * Adding a kind is now a deliberate edit to this list, in front of a reviewer —
+ * the same property the single-writer rule buys for the table itself.
+ */
+const KINDS = new Set([
+  'manual_pause',
+  'self_reported',
+  'app_switch',
+  'exit_attempt',
+  'notification',
+  'idle_timeout',
+  'device_locked',
+]);
+
+/**
+ * Kept as a belt alongside the closed set: it states the SHAPE the vocabulary
+ * must keep, so a future entry cannot smuggle punctuation or capitals in.
  */
 const BARE_TOKEN = /^[a-z_]+$/;
 
@@ -53,11 +75,26 @@ export class SqliteInterruptionRepository implements InterruptionRepository {
     blocked?: boolean;
   }): Promise<void> {
     // Without this, the discriminator itself could smuggle identity
-    // ('app_switch:chrome.exe') — the one free-text column left on this path.
-    // A thrown error rather than an assertion: assertions get stripped.
-    if (!BARE_TOKEN.test(a.kind)) {
+    // ('app_switch:chrome.exe', or the subtler 'app_switch_chrome') — the one
+    // free-text column left on this path. A thrown error rather than an
+    // assertion: assertions get stripped from release builds.
+    if (!BARE_TOKEN.test(a.kind) || !KINDS.has(a.kind)) {
       throw new ValidationError(
-        `kind "${a.kind}" must be a bare token — the log records the kind, never the identity`,
+        `kind "${a.kind}" is not one of the documented kinds — the log records ` +
+          `the kind, never the identity. Adding one is a deliberate edit to KINDS.`,
+      );
+    }
+    // An integer is 63 bits of anything, so the one numeric field a caller
+    // controls gets a sanity bound too. This does not make identity
+    // unrepresentable — see the note on the class — but it closes the
+    // easiest numeric channel.
+    if (
+      a.durationS !== undefined &&
+      a.durationS !== null &&
+      (!Number.isInteger(a.durationS) || a.durationS < 0 || a.durationS > 86_400)
+    ) {
+      throw new ValidationError(
+        `durationS must be a whole number of seconds in 0..86400, got ${String(a.durationS)}`,
       );
     }
     const ts = toEpochSeconds(this.now());

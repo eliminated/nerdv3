@@ -42,5 +42,11 @@ describe('time', () => {
     expect(msToSeconds(1999)).toBe(1);
     expect(msToSeconds(-1999)).toBe(-1);
     expect(msToSeconds(0)).toBe(0);
+    // Pinned on the NEGATIVE side too: floor and trunc agree for every positive
+    // epoch, so a floor regression in toEpochSeconds would otherwise be
+    // invisible. Dart's ~/ truncates toward zero, which is the behaviour the
+    // shipped rows were written with.
+    expect(toEpochSeconds(new Date('1969-12-31T23:59:59.500Z'))).toBe(0);
+    expect(toEpochSeconds(new Date('1969-12-31T23:59:58.500Z'))).toBe(-1);
   });
 });

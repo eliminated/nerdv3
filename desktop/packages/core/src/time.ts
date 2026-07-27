@@ -8,8 +8,19 @@
  * granularity; never assert on a millisecond component of a round-tripped value.
  */
 
+/**
+ * `Math.trunc` yields NEGATIVE zero for any value in (-1000, 0), and `-0` is
+ * not `0` under `Object.is` — so it compares unequal in tests and in any
+ * strict-equality branch, while printing indistinguishably as "0". Normalised
+ * here once rather than left as a trap at every call site.
+ */
+function truncToZero(x: number): number {
+  const n = Math.trunc(x);
+  return n === 0 ? 0 : n;
+}
+
 export function toEpochSeconds(d: Date): number {
-  return Math.trunc(d.getTime() / 1000);
+  return truncToZero(d.getTime() / 1000);
 }
 
 export function fromEpochSeconds(s: number): Date {
@@ -18,5 +29,5 @@ export function fromEpochSeconds(s: number): Date {
 
 /** Milliseconds → whole seconds, truncating toward zero. */
 export function msToSeconds(ms: number): number {
-  return Math.trunc(ms / 1000);
+  return truncToZero(ms / 1000);
 }

@@ -89,6 +89,38 @@ test('sessions.goal_id is absent from v1', () => {
   expect(columns).not.toContain('goal_id');
 });
 
+test('schema v1 declares NO triggers and NO views', () => {
+  // The other guards enumerate type='table' and type='index' only, so a trigger
+  // or a view was invisible to all of them — verified: adding both leaves the
+  // table count at 7 and the index count at 6.
+  //
+  // This is not hypothetical tidiness. A trigger can WRITE, from inside the
+  // database, a table the source-level privacy guard confines to one file:
+  //   CREATE TRIGGER … AFTER UPDATE ON sessions BEGIN
+  //     INSERT INTO interruptions (…, detail) VALUES (…); END;
+  // and a view is worse, because a reader selecting FROM v_app_usage never
+  // contains the token the confinement scan keys on.
+  const objects = fresh()
+    .prepare(
+      `SELECT type, name FROM sqlite_master
+        WHERE type IN ('trigger', 'view') AND name NOT LIKE 'sqlite_%'`,
+    )
+    .all<{ type: string; name: string }>();
+  expect(objects).toEqual([]);
+});
+
+test('sqlite_master holds nothing beyond tables and indexes', () => {
+  // Bidirectional: catches an object kind SQLite might add that the two
+  // enumerations above do not name.
+  const kinds = new Set(
+    fresh()
+      .prepare(`SELECT DISTINCT type FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'`)
+      .all<{ type: string }>()
+      .map((r) => r.type),
+  );
+  expect([...kinds].sort()).toEqual(['index', 'table']);
+});
+
 test('the six v1 indexes exist, partial exactly where data-model.md says so', () => {
   const rows = fresh()
     .prepare("SELECT name, sql FROM sqlite_master WHERE type='index' AND name LIKE 'idx_%'")
@@ -250,6 +282,30 @@ test('a committed nested transaction keeps its rows', () => {
     });
   });
   expect(d.prepare('SELECT count(*) c FROM subjects').get<{ c: number }>()?.c).toBe(2);
+});
+
+test('an ASYNC transaction callback is refused, not silently committed', () => {
+  // The signature is generic, so an async callback type-checks: T infers to
+  // Promise<void>, the SAVEPOINT prefix runs, the callback returns a PENDING
+  // promise, and RELEASE fires before the body has finished. A later throw
+  // becomes a rejection the synchronous catch never sees, so nothing rolls
+  // back and half-written state is committed. Two concurrent async
+  // transactions would also both allocate sp_0.
+  //
+  // This is not theoretical: the Dart original is `_db.transaction(() async
+  // {…})`, so the natural port of any future caller is exactly this shape.
+  const d = fresh();
+  d.prepare('INSERT INTO users (id,email,password_hash) VALUES (?,?,?)').run('u1', 'a@b.c', '');
+  const asyncFn = async (): Promise<void> => {
+    d.prepare('INSERT INTO subjects (id,user_id,name) VALUES (?,?,?)').run('s1', 'u1', 'A');
+    await Promise.resolve();
+    throw new Error('async boom');
+  };
+  expect(() =>
+    d.transaction(asyncFn as unknown as () => void),
+  ).toThrow(/requires a SYNCHRONOUS callback/);
+  // And the partial work is rolled back rather than committed.
+  expect(d.prepare('SELECT count(*) c FROM subjects').get<{ c: number }>()?.c).toBe(0);
 });
 
 test('an inner rollback does not discard the outer transaction', () => {

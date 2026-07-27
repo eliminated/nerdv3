@@ -183,3 +183,30 @@ test('a refusal REJECTS rather than throwing synchronously', async () => {
   expect(synchronousThrow, 'must not throw before returning a promise').toBe(false);
   expect(settled.map((s) => s.status)).toEqual(['rejected', 'rejected']);
 });
+
+test('a null or undefined focusRating is a ValidationError, not a raw SQL error', async () => {
+  // focusRating is mandatory, but checkRange returns early on null, so a null
+  // sailed through to "NOT NULL constraint failed" — the raw-SQLite-error class
+  // this repository exists to prevent escaping. It matters because the V3-B IPC
+  // boundary erases the `number` type and a missing field deserialises to null.
+  for (const bad of [null, undefined]) {
+    await expect(
+      repo.save({ sessionId: endedId, focusRating: bad as unknown as number }),
+    ).rejects.toThrow(ValidationError);
+  }
+  expect(surveys()).toEqual([]);
+});
+
+test('the refusal message distinguishes running, deleted and unknown sessions', async () => {
+  // `end_reason` is null for a session that is merely still running, so
+  // `?? 'no such session'` reported a live session as unknown and would send a
+  // debugger down the wrong path.
+  await expect(repo.save({ sessionId: runningId, focusRating: 5 })).rejects.toThrow(
+    /has not ended yet/,
+  );
+  await expect(repo.save({ sessionId: 'nope', focusRating: 5 })).rejects.toThrow(
+    /no such session/,
+  );
+  db.prepare('UPDATE sessions SET deleted_at = ? WHERE id = ?').run(toEpochSeconds(at(40)), endedId);
+  await expect(repo.save({ sessionId: endedId, focusRating: 5 })).rejects.toThrow(/deleted/);
+});

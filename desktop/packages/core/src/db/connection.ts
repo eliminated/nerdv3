@@ -10,8 +10,19 @@ export interface Database extends SqliteDriver {
    * caller wrapping two repository calls would otherwise deadlock the ones
    * that already transact internally. At the top level a savepoint opens an
    * implicit transaction, so the atomicity is the same.
+   *
+   * `fn` MUST be synchronous. An async callback is refused at runtime, because
+   * it would silently destroy the atomicity this method exists to provide: the
+   * callback returns a pending promise, `RELEASE` runs immediately, and a later
+   * throw becomes a rejection the synchronous `catch` never sees — so no
+   * rollback ever happens and half-written state is committed. The concurrent
+   * case is worse still, since two overlapping async transactions would both
+   * allocate the same savepoint name.
+   *
+   * This matters because the Dart original is `_db.transaction(() async {…})`,
+   * so the natural port of any future caller is exactly the broken shape.
    */
-  transaction<T>(fn: () => T): T;
+  transaction<T>(fn: () => T extends PromiseLike<unknown> ? never : T): T;
 }
 
 /**
@@ -33,12 +44,23 @@ export function openDatabase(opts: { file?: string; schemaSql?: string } = {}): 
   let depth = 0;
   return {
     ...driver,
-    transaction<T>(fn: () => T): T {
+    transaction<T>(fn: () => T extends PromiseLike<unknown> ? never : T): T {
       const name = `sp_${String(depth)}`;
       depth += 1;
       driver.exec(`SAVEPOINT ${name}`);
       try {
-        const result = fn();
+        const result = fn() as T;
+        // Enforced at RUNTIME, not only in the type: the V3-B IPC boundary
+        // erases types, and a `Promise` reaching here means the work is still
+        // in flight while we are about to RELEASE. Roll back rather than
+        // commit a transaction whose body has not finished.
+        if (typeof (result as { then?: unknown } | null)?.then === 'function') {
+          throw new TypeError(
+            'transaction(fn) requires a SYNCHRONOUS callback: an async one returns ' +
+              'before its work is done, so RELEASE would commit half-written state ' +
+              'and a later throw could never roll it back.',
+          );
+        }
         driver.exec(`RELEASE ${name}`);
         return result;
       } catch (error) {

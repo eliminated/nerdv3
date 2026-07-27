@@ -117,6 +117,18 @@ test('kind cannot carry app identity, only a bare token', async () => {
     'app_switch2',
     '',
     '  ',
+    // THE ONES A SHAPE CHECK LETS THROUGH. /^[a-z_]+$/ accepts every one of
+    // these, which is why `kind` is a CLOSED SET and not a regex. The realistic
+    // accident is not malice — it is Phase 3's window watcher writing
+    // `app_switch_${slug(appName)}`, the single most natural line of code
+    // someone will reach for, with every identity-shaped guard staying green.
+    'app_switch_chrome',
+    'app_switch_org_mozilla_firefox',
+    'discord',
+    'chrome',
+    'whatsapp',
+    'steam',
+    'a'.repeat(4000),
   ]) {
     await expect(
       repo.logSessionEvent({ sessionId, kind: smuggled, occurredAt: t0 }),
@@ -139,6 +151,32 @@ test('kind cannot carry app identity, only a bare token', async () => {
     await repo.logSessionEvent({ sessionId, kind, occurredAt: t0 });
   }
   expect(rows()).toHaveLength(documented.length);
+});
+
+test('durationS is bounded, closing the easiest numeric side channel', async () => {
+  // An integer is 63 bits of anything: durationS = 0x6368726f6d65 stores
+  // 109300247653733, which decodes byte-wise to "chrome" and comes straight
+  // back out through loadSessionDetail. A bound does not make identity
+  // unrepresentable — occurredAt and sessionId remain channels — but it closes
+  // the one an implementer could use without noticing.
+  for (const bad of [0x63_68_72_6f_6d_65, -1, 2.5, 86_401, Number.NaN]) {
+    await expect(
+      repo.logSessionEvent({ sessionId, kind: 'app_switch', occurredAt: t0, durationS: bad }),
+      `durationS ${String(bad)} must be refused`,
+    ).rejects.toThrow(ValidationError);
+  }
+  expect(rows()).toEqual([]);
+  // The legitimate range still writes — a validator refusing everything would
+  // satisfy the loop above.
+  for (const good of [0, 1, 3600, 86_400]) {
+    await repo.logSessionEvent({
+      sessionId,
+      kind: 'app_switch',
+      occurredAt: t0,
+      durationS: good,
+    });
+  }
+  expect(rows()).toHaveLength(4);
 });
 
 test("countSelfReports counts only this session's self reports", async () => {

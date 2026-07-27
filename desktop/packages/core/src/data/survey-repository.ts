@@ -40,6 +40,14 @@ export class SqliteSurveyRepository implements SurveyRepository {
     difficultyRating?: number | null;
     note?: string | null;
   }): Promise<void> {
+    // focusRating is MANDATORY, so it is checked before the nullable path:
+    // checkRange returns early on null, and the V3-B IPC boundary erases the
+    // `number` type — a missing field deserialises to null, which would
+    // otherwise sail through to a raw NOT NULL constraint error instead of the
+    // typed ValidationError this class promises.
+    if (a.focusRating === null || a.focusRating === undefined) {
+      throw new ValidationError('focusRating is required and must be an integer 1..5');
+    }
     checkRange('focusRating', a.focusRating);
     checkRange('comprehensionRating', a.comprehensionRating ?? null);
     checkRange('difficultyRating', a.difficultyRating ?? null);
@@ -64,10 +72,20 @@ export class SqliteSurveyRepository implements SurveyRepository {
         session.end_reason === null ||
         !SURVEYABLE_END_REASONS.has(session.end_reason)
       ) {
+        // Distinguish the three refusals: `end_reason` is null for a session
+        // that is merely still running, so `?? 'no such session'` would report
+        // a live session as unknown and send a debugger down the wrong path.
+        const why =
+          session === undefined
+            ? 'no such session'
+            : session.deleted_at !== null
+              ? 'session is deleted'
+              : session.ended_at === null
+                ? 'session has not ended yet'
+                : `end_reason: ${session.end_reason ?? 'null'}`;
         throw new DomainStateError(
-          `only a normally-ended session can be surveyed (end_reason: ` +
-            `${session?.end_reason ?? 'no such session'}). A crashed session cannot be ` +
-            `trusted and must never weight a qualified day (data-model.md §5.1).`,
+          `only a normally-ended session can be surveyed (${why}). A crashed session ` +
+            `cannot be trusted and must never weight a qualified day (data-model.md §5.1).`,
         );
       }
 

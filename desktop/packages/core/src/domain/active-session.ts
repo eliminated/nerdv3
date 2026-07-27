@@ -9,10 +9,15 @@ import { DomainStateError } from '../errors.js';
  *     A counter drifts, cannot survive a process restart, and cannot be
  *     reconstructed from the database — which is why crash recovery works at
  *     all.
- *  2. **Every transition returns a new instance.** Nothing here mutates, so a
- *     value captured before an await still describes the situation it was
- *     captured in. Mutating in place is how a UI frame mid-render, or a racing
- *     handler, would silently observe rewritten history.
+ *  2. **Every transition returns a new instance, and instances are genuinely
+ *     immutable.** Instants are held as epoch milliseconds — a value type —
+ *     rather than as `Date` objects, and the `Date`s handed out are fresh
+ *     copies. `readonly` alone would NOT be enough: it blocks reassigning the
+ *     field, not mutating the object the field points at, so a caller doing
+ *     `session.startedAt.setTime(0)` could rewrite a session's history from
+ *     the outside. The instance is frozen so plain-JS assignment fails too.
+ *     This matters because a value captured before an await must still describe
+ *     the situation it was captured in.
  *
  * Durations are milliseconds. Truncation to whole seconds happens exactly once,
  * at the database boundary — truncating per transition would lose up to a
@@ -26,10 +31,12 @@ export class ActiveSession {
     readonly subjectId: string,
     /** 'plain' | 'focused' — chosen at start, immutable for the session's life. */
     readonly mode: string,
-    readonly startedAt: Date,
+    private readonly startedAtMs: number,
     readonly accumulatedPauseMs: number,
-    readonly pauseStartedAt: Date | null,
-  ) {}
+    private readonly pauseStartedAtMs: number | null,
+  ) {
+    Object.freeze(this);
+  }
 
   static start(a: {
     id: string;
@@ -37,45 +44,63 @@ export class ActiveSession {
     startedAt: Date;
     mode?: string;
   }): ActiveSession {
-    return new ActiveSession(a.id, a.subjectId, a.mode ?? 'plain', a.startedAt, 0, null);
+    return new ActiveSession(a.id, a.subjectId, a.mode ?? 'plain', a.startedAt.getTime(), 0, null);
+  }
+
+  /** A fresh copy each time: handing out the internal instant would re-open the
+   *  aliasing hole that storing epoch milliseconds closes. */
+  get startedAt(): Date {
+    return new Date(this.startedAtMs);
+  }
+
+  get pauseStartedAt(): Date | null {
+    return this.pauseStartedAtMs === null ? null : new Date(this.pauseStartedAtMs);
   }
 
   get isPaused(): boolean {
-    return this.pauseStartedAt !== null;
+    return this.pauseStartedAtMs !== null;
   }
 
   pause(now: Date): ActiveSession {
-    if (this.pauseStartedAt !== null) throw new DomainStateError('already paused');
+    if (this.pauseStartedAtMs !== null) throw new DomainStateError('already paused');
     return new ActiveSession(
       this.id,
       this.subjectId,
       this.mode,
-      this.startedAt,
+      this.startedAtMs,
       this.accumulatedPauseMs,
-      now,
+      now.getTime(),
     );
   }
 
   resume(now: Date): ActiveSession {
-    const pausedAt = this.pauseStartedAt;
+    const pausedAt = this.pauseStartedAtMs;
     if (pausedAt === null) throw new DomainStateError('not paused');
     return new ActiveSession(
       this.id,
       this.subjectId,
       this.mode,
-      this.startedAt,
-      this.accumulatedPauseMs + (now.getTime() - pausedAt.getTime()),
+      this.startedAtMs,
+      // Clamped. DELIBERATE DEVIATION from the Dart original, which added the
+      // raw span: the wall clock is not monotonic, and an NTP correction mid
+      // pause would otherwise make accumulatedPauseMs negative — which inflates
+      // elapsed ABOVE the wall-clock window (25 minutes of active time inside a
+      // 20-minute session) and persists a negative paused_duration_s that no
+      // CHECK constraint would catch. InterruptionRepository.logPause already
+      // clamps this exact span, so leaving it unclamped here made the two
+      // writers disagree about one pause.
+      this.accumulatedPauseMs + Math.max(0, now.getTime() - pausedAt),
       null,
     );
   }
 
   /** Completed pauses, plus the one in flight if there is one. */
   totalPausedMs(now: Date): number {
-    const pausedAt = this.pauseStartedAt;
-    return this.accumulatedPauseMs + (pausedAt === null ? 0 : now.getTime() - pausedAt.getTime());
+    const pausedAt = this.pauseStartedAtMs;
+    return this.accumulatedPauseMs + (pausedAt === null ? 0 : Math.max(0, now.getTime() - pausedAt));
   }
 
   elapsedMs(now: Date): number {
-    return now.getTime() - this.startedAt.getTime() - this.totalPausedMs(now);
+    return now.getTime() - this.startedAtMs - this.totalPausedMs(now);
   }
 }

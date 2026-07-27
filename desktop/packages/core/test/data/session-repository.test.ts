@@ -343,3 +343,21 @@ test('loadSessionDetail shows only this session', async () => {
   expect((await repo.loadSessionDetail(mine.id)).interruptions).toHaveLength(1);
   expect((await repo.loadSessionDetail(other.id)).interruptions).toHaveLength(2);
 });
+
+test('end() clamps negative durations rather than persisting them', async () => {
+  // A clock stepped backwards makes ActiveSession.elapsedMs negative by design.
+  // Unclamped, that reached actual_duration_s and flowed straight into the
+  // qualified-day inputs of data-model.md §5.1. The two sibling duration
+  // writers (crash recovery, logPause) already clamp; this one did not.
+  const s = start();
+  await repo.insertStarted(s);
+  await repo.end({
+    id: s.id,
+    endedAt: at(-5),
+    actualDurationMs: -5 * MIN,
+    totalPausedMs: -60_000,
+  });
+  expect(row()?.['actual_duration_s']).toBe(0);
+  expect(row()?.['paused_duration_s']).toBe(0);
+  expect((await repo.listHistory())[0]?.actualDurationS).toBe(0);
+});
