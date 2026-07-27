@@ -22,14 +22,18 @@
 > of locked decision 5. Spec: `docs/superpowers/specs/2026-07-26-phase-2-signal-design.md` (§7a is
 > the review table). Plan: `docs/superpowers/plans/2026-07-26-phase-2-signal.md`.
 >
-> **▶ DO THIS NEXT — manual verification, which is now the critical path.** masterplan §8: "a phase
-> is not done until its exit criteria have been run and their output seen", and "one phase in flight
-> at a time" — so **do not start Phase 3 until these are recorded here**:
-> 1. **Phase 2:** rate a real session at the keyboard (digits + Enter), skip another, tap the
->    distraction button twice, then expand both rows in Stats.
-> 2. **Phase 1 (owed since `a42b180`):** crash-recovery kill test — pause first, since an *unpaused*
->    kill recovers ~0s by design — and the one-hour wall-clock accuracy check (within 2s).
-> 3. **Shell slice (owed since `3df3bad`):** the §8 UX walkthrough of all seven views.
+> **✅ MANUAL VERIFICATION: RUN AND PASSED (Isaac, 2026-07-27).** Phase 2's survey/distraction/Stats
+> walkthrough, Phase 1's crash-recovery kill test, and the shell's seven-view UX walkthrough were all
+> executed at the keyboard and reported passing, alongside the automated suite (81 green, run twice).
+> **Phases 1 and 2 are therefore DONE, not merely merged.** One caveat to close when convenient: the
+> one-hour wall-clock accuracy check needs 60 minutes of real elapsed time, so confirm explicitly
+> whether that specific one was run end-to-end or folded in with the rest.
+>
+> **Launch gotcha that cost a debugging round:** the Release exe is at
+> `app\build\windows\x64\runner\Release\nerdyapp.exe`, and **cmd.exe rejects a leading `&`**
+> (`& was unexpected at this time.`) — that is PowerShell's call operator, and it aborts the whole
+> line, so the app appears not to launch. In cmd use the quoted path alone, or `start "" "<path>"`.
+> The live database is `%APPDATA%\com.nerdyapp\nerdyapp\nerdyapp.db`.
 >
 > Then **Phase 3 — Focused mode (Tier 1)**, which opens with a one-day spike on whether Focus Assist
 > can be enabled programmatically at all (masterplan R1). Phase 3 inherits: `idle_timeout` with `N`
