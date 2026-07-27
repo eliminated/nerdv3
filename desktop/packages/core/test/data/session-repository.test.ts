@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, expect, test } from 'vitest';
 
+import { SqliteInterruptionRepository } from '../../src/data/interruption-repository.js';
 import { SqliteSessionRepository } from '../../src/data/session-repository.js';
 import { SqliteSubjectRepository } from '../../src/data/subject-repository.js';
+import { SqliteSurveyRepository } from '../../src/data/survey-repository.js';
 import type { Database } from '../../src/db/connection.js';
 import { ensureLocalUser } from '../../src/db/local-user.js';
 import { ActiveSession } from '../../src/domain/active-session.js';
@@ -261,4 +263,83 @@ test('recovery cannot tell a live session from a crashed one — launch-time onl
   await repo.insertStarted(start('live-1'));
   expect(await repo.recoverCrashedSessions()).toBe(1);
   expect(row('live-1')?.['end_reason']).toBe('crashed');
+});
+
+test('loadSessionDetail returns the survey and the interruption log in order', async () => {
+  const s = start();
+  await repo.insertStarted(s);
+  await repo.end({ id: s.id, endedAt: at(30), actualDurationMs: 30 * MIN, totalPausedMs: 0 });
+
+  const log = new SqliteInterruptionRepository(db, clock.now);
+  // Two self-reports in the SAME second on purpose: occurred_at has only
+  // second precision, so the id tiebreak (UUIDv7, time-ordered) is the only
+  // thing making this deterministic between runs.
+  await log.logSelfReport({ sessionId: s.id, occurredAt: at(5) });
+  await log.logSelfReport({ sessionId: s.id, occurredAt: at(5) });
+  await log.logPause({ sessionId: s.id, pauseStartedAt: at(1), resumedAt: at(3) });
+  await new SqliteSurveyRepository(db, clock.now).save({
+    sessionId: s.id,
+    focusRating: 4,
+    comprehensionRating: 2,
+    note: 'ok',
+  });
+
+  const detail = await repo.loadSessionDetail(s.id);
+  expect(detail.hasSurvey).toBe(true);
+  expect([detail.focusRating, detail.comprehensionRating, detail.difficultyRating]).toEqual([
+    4, 2, null,
+  ]);
+  expect(detail.note).toBe('ok');
+  // Ordered by occurred_at, so the pause at +1min precedes the reports at +5.
+  expect(detail.interruptions.map((i) => i.kind)).toEqual([
+    'manual_pause',
+    'self_reported',
+    'self_reported',
+  ]);
+  expect(detail.interruptions[0]?.durationS).toBe(120);
+  expect(detail.interruptions[0]?.occurredAt.getTime()).toBe(at(1).getTime());
+  expect(detail.interruptions[1]?.durationS).toBeNull();
+});
+
+test('loadSessionDetail on an unrated session reports no survey', async () => {
+  const s = start();
+  await repo.insertStarted(s);
+  await repo.end({ id: s.id, endedAt: at(30), actualDurationMs: 30 * MIN, totalPausedMs: 0 });
+  const detail = await repo.loadSessionDetail(s.id);
+  expect(detail.hasSurvey).toBe(false);
+  expect(detail.focusRating).toBeNull();
+  expect(detail.note).toBeNull();
+  expect(detail.interruptions).toEqual([]);
+});
+
+test('loadSessionDetail excludes soft-deleted surveys and interruptions', async () => {
+  const s = start();
+  await repo.insertStarted(s);
+  await repo.end({ id: s.id, endedAt: at(30), actualDurationMs: 30 * MIN, totalPausedMs: 0 });
+  await new SqliteInterruptionRepository(db, clock.now).logSelfReport({
+    sessionId: s.id,
+    occurredAt: at(5),
+  });
+  await new SqliteSurveyRepository(db, clock.now).save({ sessionId: s.id, focusRating: 4 });
+
+  db.prepare('UPDATE interruptions SET deleted_at = ?').run(toEpochSeconds(at(40)));
+  db.prepare('UPDATE session_surveys SET deleted_at = ?').run(toEpochSeconds(at(40)));
+
+  const detail = await repo.loadSessionDetail(s.id);
+  expect(detail.interruptions).toEqual([]);
+  expect(detail.hasSurvey).toBe(false);
+});
+
+test('loadSessionDetail shows only this session', async () => {
+  const mine = start('mine');
+  const other = start('other');
+  await repo.insertStarted(mine);
+  await repo.insertStarted(other);
+  const log = new SqliteInterruptionRepository(db, clock.now);
+  await log.logSelfReport({ sessionId: mine.id, occurredAt: at(5) });
+  await log.logSelfReport({ sessionId: other.id, occurredAt: at(5) });
+  await log.logSelfReport({ sessionId: other.id, occurredAt: at(6) });
+
+  expect((await repo.loadSessionDetail(mine.id)).interruptions).toHaveLength(1);
+  expect((await repo.loadSessionDetail(other.id)).interruptions).toHaveLength(2);
 });

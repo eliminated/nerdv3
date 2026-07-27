@@ -2,7 +2,20 @@ import type { Database } from '../db/connection.js';
 import type { ActiveSession } from '../domain/active-session.js';
 import { localUserId } from '../ids.js';
 import { fromEpochSeconds, msToSeconds, toEpochSeconds } from '../time.js';
-import type { HistoryEntry, SessionRepository } from './ports.js';
+import type { HistoryEntry, SessionDetailView, SessionRepository } from './ports.js';
+
+interface RawSurvey {
+  focus_rating: number;
+  comprehension_rating: number | null;
+  difficulty_rating: number | null;
+  note: string | null;
+}
+
+interface RawInterruption {
+  kind: string;
+  occurred_at: number;
+  duration_s: number | null;
+}
 
 interface RawHistory {
   id: string;
@@ -143,5 +156,47 @@ export class SqliteSessionRepository implements SessionRepository {
       actualDurationS: r.actual_duration_s ?? 0,
       endReason: r.end_reason,
     }));
+  }
+
+  /**
+   * The survey (if the session was rated) plus its event log.
+   *
+   * This is the ONE legal reader of the event log outside its own repository,
+   * and `test/db/write-confinement.test.ts` names this file explicitly — a
+   * second reader has to be added there deliberately, in front of a reviewer.
+   */
+  async loadSessionDetail(sessionId: string): Promise<SessionDetailView> {
+    const survey = this.db
+      .prepare(
+        `SELECT focus_rating, comprehension_rating, difficulty_rating, note
+           FROM session_surveys
+          WHERE session_id = ? AND deleted_at IS NULL`,
+      )
+      .get<RawSurvey>(sessionId);
+
+    // Ordered by id as well as time: occurred_at is epoch SECONDS, so two
+    // events in the same second would otherwise sort arbitrarily between runs.
+    // newId() is UUIDv7, which is lexicographically time-ordered.
+    const rows = this.db
+      .prepare(
+        `SELECT kind, occurred_at, duration_s
+           FROM interruptions
+          WHERE session_id = ? AND deleted_at IS NULL
+          ORDER BY occurred_at ASC, id ASC`,
+      )
+      .all<RawInterruption>(sessionId);
+
+    return {
+      interruptions: rows.map((r) => ({
+        kind: r.kind,
+        occurredAt: fromEpochSeconds(r.occurred_at),
+        durationS: r.duration_s,
+      })),
+      focusRating: survey?.focus_rating ?? null,
+      comprehensionRating: survey?.comprehension_rating ?? null,
+      difficultyRating: survey?.difficulty_rating ?? null,
+      note: survey?.note ?? null,
+      hasSurvey: survey !== undefined,
+    };
   }
 }

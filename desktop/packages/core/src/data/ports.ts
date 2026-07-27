@@ -85,6 +85,18 @@ export interface SessionRepository {
   recoverCrashedSessions(): Promise<number>;
 
   listHistory(): Promise<HistoryEntry[]>;
+
+  /** Everything the Stats inline expansion shows for one session. */
+  loadSessionDetail(sessionId: string): Promise<SessionDetailView>;
+}
+
+export interface SessionDetailView {
+  interruptions: InterruptionEntry[];
+  focusRating: number | null;
+  comprehensionRating: number | null;
+  difficultyRating: number | null;
+  note: string | null;
+  hasSurvey: boolean;
 }
 
 /** Read projection for the Stats inline expansion. */

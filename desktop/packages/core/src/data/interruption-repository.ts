@@ -27,9 +27,13 @@ const BARE_TOKEN = /^[a-z_]+$/;
  *
  * No method here accepts free-form context, so app identity is not
  * REPRESENTABLE through this API — the guarantee is structural, not a matter of
- * callers behaving. Phase 3's first legitimate `detail` write has to widen a
+ * callers behaving. Phase 3's first legitimate such write has to widen a
  * signature in this file deliberately, in front of a reviewer, and the
  * confinement test names this file so that edit cannot be quiet.
+ *
+ * (This file deliberately never spells the free-text column's name — the
+ * confinement test asserts that, so the word appearing here at all would mean
+ * someone had started to make identity representable.)
  */
 export class SqliteInterruptionRepository implements InterruptionRepository {
   constructor(
