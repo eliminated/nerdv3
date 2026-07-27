@@ -1,4 +1,4 @@
-.claude/
+﻿.claude/
 claude.md
 AGENTS.md
 .superpowers/
@@ -7,9 +7,9 @@ AGENTS.md
 CLAUDE.md
 
 # Flutter / Dart
-app/build/
-app/.dart_tool/
-app/windows/flutter/ephemeral/
+app-flutter/build/
+app-flutter/.dart_tool/
+app-flutter/windows/flutter/ephemeral/
 *.g.dart
-app/android/local.properties
-app/android/**/GeneratedPluginRegistrant.java
+app-flutter/android/local.properties
+app-flutter/android/**/GeneratedPluginRegistrant.java
