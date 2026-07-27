@@ -1,15 +1,15 @@
-# Session Handoff — NerdyApp Companion (build iteration **V4** — desktop stack changed 2026-07-27)
+# Session Handoff — NerdyApp Companion (build iteration **V3** — desktop stack changed 2026-07-27)
 
-> ## ⏩ LATEST (2026-07-27, "V4 pivot — Electron rewrite begins" session) — READ THIS FIRST
+> ## ⏩ LATEST (2026-07-27, "V3 pivot — Electron rewrite begins" session) — READ THIS FIRST
 >
 > **State:** branch **`feat/v4-electron-rewrite`** (pushed), one file uncommitted
-> (`docs/superpowers/specs/2026-07-27-v4-desktop-stack-change.md` — the fresh-database decision;
+> (`docs/superpowers/specs/2026-07-27-v3-desktop-stack-change.md` — the fresh-database decision;
 > commit it first). Last commit `b63d016` on top of `a695f8d`, `b4cd16e`, `d70d6a8`. `main` is at
 > `d70d6a8` with **Phases 0–2 complete in Flutter and all five PRs merged**.
 >
 > **⚠️ THE BIG CHANGE: the desktop app is being rewritten in Electron + Vue 3 + TypeScript.** Isaac
 > decided this on 2026-07-27, superseding masterplan §3 **locked decision 1** (Flutter). Read
-> `docs/superpowers/specs/2026-07-27-v4-desktop-stack-change.md` before touching anything — it is the
+> `docs/superpowers/specs/2026-07-27-v3-desktop-stack-change.md` before touching anything — it is the
 > governing document for this iteration and records the decisions, the layout, and what must be
 > carried across verbatim. Summary of his choices:
 > - **Stack:** a web stack chosen for an "advanced / premium-ish" feel; the concrete pick was
@@ -21,7 +21,7 @@
 >   runs on example data, verbose errors, for walking and debugging the UX without touching real
 >   study history. The seam: `core` exposes repository *interfaces*; the product binds SQLite, the
 >   test build binds in-memory fixtures. Same `ui` package either way.
-> - **Fresh database.** V4 does not open the V3 file (it holds 1 subject, 2 sessions — nothing worth
+> - **Fresh database.** V3 does not open the V3 file (it holds 1 subject, 2 sessions — nothing worth
 >   migrating). The old file stays on disk untouched.
 > - **Flutter is retired, not deleted** → moved intact to **`app-flutter/`**, reference only. Its
 >   tests are the behavioural specification the port must reproduce.
@@ -29,7 +29,7 @@
 >   Modernist design persists**.
 >
 > **What actually shipped this session (4 commits, nothing merged to `main`):**
-> `b4cd16e` the V4 decision record + **`desktop/packages/core/src/db/schema.sql`** — frozen schema v1
+> `b4cd16e` the V3 decision record + **`desktop/packages/core/src/db/schema.sql`** — frozen schema v1
 > transcribed **byte-faithfully from the live database** via `sqlite_master`, not re-derived, so it is
 > ground truth; `a695f8d` the `app/` → `app-flutter/` move with `.gitignore` paths followed;
 > `b63d016` CI repointed at `app-flutter` so the reference suite stays green during the port.
@@ -46,7 +46,7 @@
 > **Verification correction (important, don't re-record it wrong):** "all tests pass" this session
 > meant the **automated** Flutter suite (81 green, run twice). The **manual** walkthroughs were NOT
 > run — proven by the live DB holding zero `session_surveys` and zero `interruptions` rows. The
-> obligation transfers to V4: the one-hour wall-clock accuracy check and the crash-recovery kill test
+> obligation transfers to V3: the one-hour wall-clock accuracy check and the crash-recovery kill test
 > are properties of the *product* and must be earned again in Electron before claiming Phase 1/2
 > parity.
 >
@@ -57,9 +57,9 @@
 >    `ActiveSession` timing state machine (`app-flutter/lib/features/session/domain/active_session.dart`)
 >    and the four repositories (subjects, sessions, surveys, interruptions) against `schema.sql`, with
 >    a vitest suite mirroring `app-flutter/test/` — that suite is the spec, and it already encodes two
->    bugs found the hard way (§4 of the V4 spec lists all seven invariants that must survive the port).
+>    bugs found the hard way (§4 of the V3 spec lists all seven invariants that must survive the port).
 > 3. Only then the Electron shell, the `ui` package, and the seven views.
-> **Do not re-litigate** the seven carried-over invariants in V4 spec §4 (schema, timer laws, post-end
+> **Do not re-litigate** the seven carried-over invariants in V3 spec §4 (schema, timer laws, post-end
 > immutability, one-row-per-pause with state cleared before the await, survey rules, the privacy line,
 > the Modernist design). They were designed, reviewed and verified; the port reproduces them.
 >
@@ -102,11 +102,11 @@
 > recorded all three as passed on the strength of an ambiguous "all tests pass"; that was wrong and
 > is retracted here.
 >
-> **How much this still matters, given the V4 rewrite:** less than it did. The Flutter app is now
+> **How much this still matters, given the V3 rewrite:** less than it did. The Flutter app is now
 > reference-only, so re-running a retired app's checklist buys little. What carries forward is the
 > **automated** suite as the behavioural specification the rewrite must reproduce — and the
 > obligation itself transfers: the one-hour wall-clock accuracy check and the crash-recovery kill
-> test are properties of the *product*, so they must be run against the Electron build before V4 can
+> test are properties of the *product*, so they must be run against the Electron build before V3 can
 > claim Phase 1/2 parity.
 >
 > **Launch gotcha that cost a debugging round:** the Release exe is at
@@ -371,12 +371,14 @@ thing, keep a study habit alive, and see the work they actually did. The device 
 there is no server, no auth and no sync before v1.0. `docs/masterplan.md` remains the governing document
 for **sequencing and product decisions** — it supersedes the README roadmap where they disagree — with
 one exception: its §3 **locked decision 1 (Flutter) is superseded** by
-`docs/superpowers/specs/2026-07-27-v4-desktop-stack-change.md`, which is governing for **stack and
+`docs/superpowers/specs/2026-07-27-v3-desktop-stack-change.md`, which is governing for **stack and
 architecture**. Each merge should still leave a usable app (L3).
 
-**Iteration status:** Phases 0–2 were completed in Flutter (V3) and are being **re-implemented** in
-Electron + Vue 3 + TypeScript (V4). The phase *sequence and specs below are unchanged* — what changed is
-the client technology. Phases 0–2 are therefore "designed and proven, awaiting port", not "to design".
+**Iteration status:** still build iteration **V3**. Phases 0–2 were completed in Flutter and are
+being **re-implemented** in Electron + Vue 3 + TypeScript. The phase *sequence and specs below are
+unchanged* — what changed is the client technology, which is a stack change inside a surviving plan,
+not a from-scratch restart (see the stack-change spec's preamble). Phases 0–2 are therefore
+"designed and proven, awaiting port", not "to design".
 
 Phases (from `docs/masterplan.md` §7, as re-sliced):
 
@@ -388,7 +390,7 @@ Phases (from `docs/masterplan.md` §7, as re-sliced):
   immutability tests, wall-clock accuracy (code merged; manual exit checks a+b still owed)
 - **Phase 2 — The signal** — **CODE DONE** (`fb9da40`) — survey persistence + interruption log
   (manual verification still owed before the phase is declared done)
-- **V4 pivot — Electron rewrite** — **IN PROGRESS** (branch `feat/v4-electron-rewrite`) — stack change
+- **V3 pivot — Electron rewrite** — **IN PROGRESS** (branch `feat/v4-electron-rewrite`) — stack change
   recorded, schema ported, Flutter retired to `app-flutter/`. **Phases 0–2 must be re-implemented in
   the new stack before Phase 3 starts.**
 - **Phase 3 — Focused mode (Tier 1)** — TODO — fullscreen sessions, escapes detected and logged
@@ -417,7 +419,7 @@ Phases (from `docs/masterplan.md` §7, as re-sliced):
 - **V3 bootstrap** (`a60a867`, `ae37ff5`, 2026-07-25) — new repo, docs carried across, post-mortems
   written, environment facts recorded in masterplan §1a.
 
-- **V4 pivot — stack change + foundations** (`b4cd16e`, `a695f8d`, `b63d016`, 2026-07-27, **unmerged**
+- **V3 pivot — stack change + foundations** (`b4cd16e`, `a695f8d`, `b63d016`, 2026-07-27, **unmerged**
   on `feat/v4-electron-rewrite`) — decision record, byte-faithful `schema.sql`, Flutter retired to
   `app-flutter/`, CI repointed. No application code yet.
 
@@ -425,7 +427,7 @@ Phases (from `docs/masterplan.md` §7, as re-sliced):
 
 *Stack-independent (these survive the rewrite — they are the reason it is a port, not a redesign):*
 
-- **The seven carried-over invariants** in V4 spec §4: frozen schema; elapsed time always from
+- **The seven carried-over invariants** in V3 spec §4: frozen schema; elapsed time always from
   timestamps; persist on every state change; crash recovery to `end_reason='crashed'` at the last
   write, clamped; post-end immutability enforced at the data layer; one append-only `manual_pause`
   row per completed pause with state cleared *before* the write await; survey rules; the privacy
@@ -437,7 +439,7 @@ Phases (from `docs/masterplan.md` §7, as re-sliced):
 - **Every mandated test must name the change that would make it fail** — and guards are *seen red*
   before being trusted. This caught real bugs three times this project.
 - Conventional Commits; GitHub Flow, squash PRs; README edits **require** a README-changelog row;
-  build iteration (now V4) ≠ release version (v0.1.0); `CLAUDE.md` is git-ignored by design.
+  build iteration (now V3) ≠ release version (v0.1.0); `CLAUDE.md` is git-ignored by design.
 - Mock/placeholder content lives in exactly one module and always renders inside a visible stamp;
   the UI never claims a capability the app lacks.
 
@@ -448,18 +450,18 @@ Phases (from `docs/masterplan.md` §7, as re-sliced):
 
 ## 🔜 Future slices (ordered)
 
-1. **V4-A — `core` in TypeScript (start here).** npm workspace under `desktop/`, TS strict, vitest;
+1. **V3-A — `core` in TypeScript (start here).** npm workspace under `desktop/`, TS strict, vitest;
    port `ActiveSession` and the four repositories against `schema.sql`; vitest suite mirroring
    `app-flutter/test/`. Reference sources: `app-flutter/lib/features/session/{domain,data}/` and
    `app-flutter/lib/features/subjects/data/`. Deliverable: the correctness core proven in the new
    stack with no UI at all.
-2. **V4-B — Electron shell + IPC + the two builds.** Main/preload/renderer; `nerdyapp.exe` binds
+2. **V3-B — Electron shell + IPC + the two builds.** Main/preload/renderer; `nerdyapp.exe` binds
    SQLite (fresh database), `nerdyapp-test.exe` binds in-memory fixtures and opens no database.
    **Verify early whether Electron's bundled Node exposes `node:sqlite`**, else `better-sqlite3`.
-3. **V4-C — `ui` package: Modernist theme + the seven views**, ported from
+3. **V3-C — `ui` package: Modernist theme + the seven views**, ported from
    `app-flutter/lib/features/*/presentation/` and `core/theme/modernist.dart`. Design tokens are in
-   V4 spec §4.7 and the original bundle (`NerdyApp Study Companion Design.zip`).
-4. **V4-D — parity verification.** Re-earn the Phase 1/2 gates in Electron: the three Phase 2 exit
+   V3 spec §4.7 and the original bundle (`NerdyApp Study Companion Design.zip`).
+4. **V3-D — parity verification.** Re-earn the Phase 1/2 gates in Electron: the three Phase 2 exit
    criteria (with the interaction budget counted mechanically), crash recovery, and the one-hour
    wall-clock accuracy check. Replace the retired drift schema guards with a
    `schema.sql`-vs-live-database test.
@@ -470,7 +472,7 @@ Phases (from `docs/masterplan.md` §7, as re-sliced):
 **Backlog / deferred (non-blocking):** `desktop/packages/lab` is a vestigial directory from an earlier
 reading of "two apps" — the second build is `test` (no database, example data), so rename or delete it;
 masterplan §3 decision 1 and §10 still need a row recording the stack change; README describes a Flutter
-app throughout and will need a rewrite (plus its required changelog row) once V4 runs;
+app throughout and will need a rewrite (plus its required changelog row) once V3 runs;
 liveness heartbeat for unpaused-crash duration bound;
 `start()` double-tap orphan session (self-healing); README badge `TODO` (needs public repo); V1
 post-mortem period detail in README iteration table; fork-PR CI trigger (`on: pull_request`) if
@@ -488,7 +490,7 @@ confirming persistence is routed to Isaac, never claimed by an agent.
 
 ## ⚠️ Gotchas / hard-won lessons
 
-**V4 / environment (2026-07-27):**
+**V3 / environment (2026-07-27):**
 
 - **`cmd.exe` rejects a leading `&`** (`& was unexpected at this time.`) and aborts the whole line —
   that is PowerShell's call operator. Cost a debugging round when the app "wouldn't launch". Give

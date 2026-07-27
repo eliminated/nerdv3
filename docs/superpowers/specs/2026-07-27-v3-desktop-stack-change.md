@@ -1,8 +1,18 @@
-# V4 — Desktop stack change: Flutter → Electron + Vue 3 + TypeScript
+# V3 — Desktop stack change: Flutter → Electron + Vue 3 + TypeScript
 
 **Date:** 2026-07-27 · **Status:** decided by Isaac (chat, 2026-07-27) · **Supersedes:** masterplan §3 locked decision 1
 
-This is a **build-iteration-level change**. Under `CLAUDE.md`'s definition ("increments only on a from-scratch restart"), rewriting the client in another language qualifies, so this document labels the work **V4**. The repository keeps the name `nerdv3`; say the word and I will relabel everything V3.x instead — nothing below depends on the number.
+**This remains build iteration V3** (decided by Isaac, 2026-07-27). An earlier revision of this document labelled the work "V4" on the reading that `CLAUDE.md`'s "increments only on a from-scratch restart" covers rewriting the client in another language. That was overturned: the masterplan, the four design documents, the frozen schema v1 and the whole phase sequence carry across untouched — only the client technology changed, and this document's own §2 calls the result "a port of proven logic, not a redesign". A stack change inside a surviving plan is not a from-scratch restart. `CLAUDE.md`'s "Currently V3" is therefore correct, not stale, and the repository name `nerdv3` matches.
+
+**Three numbers, deliberately distinct** (extends `CLAUDE.md`'s two):
+
+| Axis | Form | Meaning | Now |
+|---|---|---|---|
+| Build iteration | `V3` | Which attempt at building the app this codebase is. Increments only on a from-scratch restart. | V3 |
+| Release version | `v0.*.*` | SemVer of shipped software. | v0.1.0 (pre-alpha) |
+| Plan version | `P<iteration><plan><slice>` | Which revision of a plan document is in force — e.g. **P31A** = plan, V**3**, revision **1**, slice **A**. A revision made during execution increments the middle digit (P32A). | P31A |
+
+The rewrite is sliced **V3-A … V3-D** (§7). Note that the git branch `feat/v4-electron-rewrite` and the commit subjects of `b4cd16e`, `a695f8d`, `b63d016`, `b1a1d85` still say "V4": they are published history and are left alone rather than rewritten. The branch is squash-merged and deleted at the end of the rewrite, so the name does not outlive it.
 
 ## 1. What changed and why
 
@@ -77,7 +87,7 @@ Per Isaac's clarification (2026-07-27): **the test build does not connect to a d
 | Errors | minimal and handled: user-facing failures are surfaced quietly and recoverably, never a stack trace | verbose: unhandled errors surface loudly, devtools available |
 | Risk it removes | — | every UX experiment currently writes to the same real database the user's streak depends on |
 
-**The product starts on a FRESH database** (decided by Isaac, 2026-07-27). The existing `nerdyapp.db` holds one subject and two sessions from testing — nothing worth migrating — so V4 creates its own file rather than opening the V3 one. Consequences: no import path to build, no risk to the old file, and `schema.sql` is still ported byte-faithfully (§4.1) because the *schema* remains frozen even though the *data* does not carry over. The V3 database stays on disk untouched as a fallback.
+**The product starts on a FRESH database** (decided by Isaac, 2026-07-27). The existing `nerdyapp.db` holds one subject and two sessions from testing — nothing worth migrating — so V3 creates its own file rather than opening the V3 one. Consequences: no import path to build, no risk to the old file, and `schema.sql` is still ported byte-faithfully (§4.1) because the *schema* remains frozen even though the *data* does not carry over. The V3 database stays on disk untouched as a fallback.
 
 **This is the seam that makes it possible:** `core` exposes repository *interfaces*; the product binds them to SQLite, the test build binds them to an in-memory fixture implementation. Same `ui` package, same views, same design — only the binding differs. That also means the fixture implementation doubles as the test double for unit tests, and the renderer never learns which one it is talking to.
 

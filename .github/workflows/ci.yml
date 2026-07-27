@@ -48,7 +48,7 @@ jobs:
         run: git fetch origin main
       - name: Fail if a frozen schema snapshot was rewritten or removed
         run: git diff --exit-code --diff-filter=MD origin/main -- drift_schemas
-      # V4 note (2026-07-27): the Flutter app is retired to reference status, but
+      # V3 note (2026-07-27): the Flutter app is retired to reference status, but
       # its suite is the behavioural specification the Electron rewrite must
       # reproduce, so it keeps running until the desktop suite replaces it.
       # The schema guards below still protect the frozen v1 that the rewrite ports.
