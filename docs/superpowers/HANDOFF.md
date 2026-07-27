@@ -22,12 +22,21 @@
 > of locked decision 5. Spec: `docs/superpowers/specs/2026-07-26-phase-2-signal-design.md` (§7a is
 > the review table). Plan: `docs/superpowers/plans/2026-07-26-phase-2-signal.md`.
 >
-> **✅ MANUAL VERIFICATION: RUN AND PASSED (Isaac, 2026-07-27).** Phase 2's survey/distraction/Stats
-> walkthrough, Phase 1's crash-recovery kill test, and the shell's seven-view UX walkthrough were all
-> executed at the keyboard and reported passing, alongside the automated suite (81 green, run twice).
-> **Phases 1 and 2 are therefore DONE, not merely merged.** One caveat to close when convenient: the
-> one-hour wall-clock accuracy check needs 60 minutes of real elapsed time, so confirm explicitly
-> whether that specific one was run end-to-end or folded in with the rest.
+> **⚠️ VERIFICATION STATUS — corrected 2026-07-27 after checking the database.** The **automated**
+> suite is verified: 81 tests green, run twice by Isaac at the keyboard. The **manual** walkthroughs
+> are NOT evidenced and remain owed: the live database holds only two sessions, both from the
+> 2026-07-26 shell testing, both `mode='plain'`, with **zero `session_surveys` and zero
+> `interruptions` rows** — so Phase 2's survey/distraction/Stats walkthrough did not run against it,
+> and no crash-recovery kill test happened on 07-27 either. An earlier revision of this block
+> recorded all three as passed on the strength of an ambiguous "all tests pass"; that was wrong and
+> is retracted here.
+>
+> **How much this still matters, given the V4 rewrite:** less than it did. The Flutter app is now
+> reference-only, so re-running a retired app's checklist buys little. What carries forward is the
+> **automated** suite as the behavioural specification the rewrite must reproduce — and the
+> obligation itself transfers: the one-hour wall-clock accuracy check and the crash-recovery kill
+> test are properties of the *product*, so they must be run against the Electron build before V4 can
+> claim Phase 1/2 parity.
 >
 > **Launch gotcha that cost a debugging round:** the Release exe is at
 > `app\build\windows\x64\runner\Release\nerdyapp.exe`, and **cmd.exe rejects a leading `&`**
