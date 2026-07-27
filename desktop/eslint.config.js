@@ -2,7 +2,9 @@ import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-  { ignores: ['**/node_modules/**', '**/dist/**', '**/coverage/**'] },
+  // `out/` is electron-vite's build output — bundled JS that is not in any
+  // tsconfig, so type-aware rules crash on it rather than merely reporting.
+  { ignores: ['**/node_modules/**', '**/dist/**', '**/coverage/**', '**/out/**'] },
   js.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,
   {
@@ -32,8 +34,30 @@ export default tseslint.config(
     rules: { '@typescript-eslint/require-await': 'off' },
   },
   {
-    // eslint.config.js and vitest.config.ts are not in any package tsconfig.
-    files: ['**/*.config.{js,ts}'],
+    // Files outside every package tsconfig, so type-aware rules cannot run and
+    // would CRASH rather than report: the config files themselves, and the
+    // CommonJS Electron guard under scripts/.
+    files: ['**/*.config.{js,ts}', '**/*.cjs'],
     extends: [tseslint.configs.disableTypeChecked],
+  },
+  {
+    // The Electron sqlite guard is deliberately CommonJS: it is loaded by
+    // Electron's main process directly, with no bundler and no TypeScript, so
+    // that verifying the runtime does not depend on the build working.
+    files: ['**/*.cjs'],
+    languageOptions: {
+      sourceType: 'commonjs',
+      globals: {
+        require: 'readonly',
+        module: 'writable',
+        exports: 'writable',
+        __dirname: 'readonly',
+        __filename: 'readonly',
+        console: 'readonly',
+        process: 'readonly',
+        Buffer: 'readonly',
+      },
+    },
+    rules: { '@typescript-eslint/no-require-imports': 'off' },
   },
 );
