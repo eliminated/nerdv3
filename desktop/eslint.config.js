@@ -30,7 +30,10 @@ export default tseslint.config(
     // constraint violation would throw synchronously out of a method declared
     // to return a Promise, and `Promise.all([...])` or a bare `.catch()` would
     // then get an uncaught exception instead of a rejection.
-    files: ['packages/*/src/data/*.ts', 'packages/*/src/db/local-user.ts'],
+    // `**` on purpose: data/fixtures/ holds the second binding, and it is
+    // synchronous for the same reason — it is an in-memory implementation of an
+    // async port.
+    files: ['packages/*/src/data/**/*.ts', 'packages/*/src/db/local-user.ts'],
     rules: { '@typescript-eslint/require-await': 'off' },
   },
   {

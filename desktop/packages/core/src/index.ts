@@ -40,3 +40,22 @@ export {
   SqliteInterruptionRepository,
 } from './data/interruption-repository.js';
 export { SqliteSurveyRepository } from './data/survey-repository.js';
+
+/**
+ * The in-memory binding for `nerdyapp-test.exe`, which opens no database at all
+ * (V3 spec §5). One contract suite runs against this and the SQLite binding
+ * both, so the two executables cannot drift apart.
+ */
+export {
+  createFixtureRepositories,
+  emptyStore,
+  FixtureInterruptionRepository,
+  FixtureSessionRepository,
+  FixtureSubjectRepository,
+  FixtureSurveyRepository,
+  type FixtureStore,
+  type Repositories,
+} from './data/fixtures/index.js';
+
+/** The invariants both bindings share — one copy, deliberately. */
+export { KINDS, SURVEYABLE_END_REASONS } from './data/rules.js';

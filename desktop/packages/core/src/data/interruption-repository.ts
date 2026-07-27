@@ -1,43 +1,19 @@
 import type { Database } from '../db/connection.js';
-import { ValidationError } from '../errors.js';
 import { newId } from '../ids.js';
 import { toEpochSeconds } from '../time.js';
 import type { InterruptionRepository } from './ports.js';
+import {
+  assertDurationS,
+  assertKind,
+  KIND_MANUAL_PAUSE,
+  KIND_SELF_REPORTED,
+  pauseSpanSeconds,
+} from './rules.js';
 
-/**
- * Wire values for the `kind` column. It has no CHECK in schema v1, so these
- * strings ARE the contract — renaming one silently orphans history.
- */
-export const KIND_MANUAL_PAUSE = 'manual_pause';
-export const KIND_SELF_REPORTED = 'self_reported';
-
-/**
- * The CLOSED vocabulary of focus-enforcement.md §7. A closed set, not a shape
- * check, because a shape check is not a privacy control:
- * `/^[a-z_]+$/` accepts `app_switch_chrome`, `discord`, `whatsapp` — nearly
- * every application name slugs into it. The realistic accident is not malice,
- * it is Phase 3's window watcher writing
- * `kind: \`app_switch_${slug(appName)}\`` and every identity-shaped guard
- * staying green.
- *
- * Adding a kind is now a deliberate edit to this list, in front of a reviewer —
- * the same property the single-writer rule buys for the table itself.
- */
-const KINDS = new Set([
-  'manual_pause',
-  'self_reported',
-  'app_switch',
-  'exit_attempt',
-  'notification',
-  'idle_timeout',
-  'device_locked',
-]);
-
-/**
- * Kept as a belt alongside the closed set: it states the SHAPE the vocabulary
- * must keep, so a future entry cannot smuggle punctuation or capitals in.
- */
-const BARE_TOKEN = /^[a-z_]+$/;
+// The kind vocabulary and the duration bound live in ./rules.js so the fixture
+// binding enforces the SAME copy. Two copies of a privacy vocabulary is exactly
+// how one of them ends up accepting `app_switch_chrome`.
+export { KIND_MANUAL_PAUSE, KIND_SELF_REPORTED } from './rules.js';
 
 /**
  * The ONLY writer of the event log — enforced by
@@ -74,29 +50,12 @@ export class SqliteInterruptionRepository implements InterruptionRepository {
     durationS?: number | null;
     blocked?: boolean;
   }): Promise<void> {
-    // Without this, the discriminator itself could smuggle identity
+    // Without these, the discriminator itself could smuggle identity
     // ('app_switch:chrome.exe', or the subtler 'app_switch_chrome') — the one
-    // free-text column left on this path. A thrown error rather than an
-    // assertion: assertions get stripped from release builds.
-    if (!BARE_TOKEN.test(a.kind) || !KINDS.has(a.kind)) {
-      throw new ValidationError(
-        `kind "${a.kind}" is not one of the documented kinds — the log records ` +
-          `the kind, never the identity. Adding one is a deliberate edit to KINDS.`,
-      );
-    }
-    // An integer is 63 bits of anything, so the one numeric field a caller
-    // controls gets a sanity bound too. This does not make identity
-    // unrepresentable — see the note on the class — but it closes the
-    // easiest numeric channel.
-    if (
-      a.durationS !== undefined &&
-      a.durationS !== null &&
-      (!Number.isInteger(a.durationS) || a.durationS < 0 || a.durationS > 86_400)
-    ) {
-      throw new ValidationError(
-        `durationS must be a whole number of seconds in 0..86400, got ${String(a.durationS)}`,
-      );
-    }
+    // free-text field left on this path — and the numeric field is 63 bits of
+    // anything. Thrown errors rather than assertions: assertions get stripped.
+    assertKind(a.kind);
+    assertDurationS(a.durationS);
     const ts = toEpochSeconds(this.now());
     this.db
       .prepare(
@@ -127,12 +86,11 @@ export class SqliteInterruptionRepository implements InterruptionRepository {
    * monotonic — an NTP correction mid-pause would otherwise store a negative.
    */
   async logPause(a: { sessionId: string; pauseStartedAt: Date; resumedAt: Date }): Promise<void> {
-    const spanS = Math.trunc((a.resumedAt.getTime() - a.pauseStartedAt.getTime()) / 1000);
     return this.logSessionEvent({
       sessionId: a.sessionId,
       kind: KIND_MANUAL_PAUSE,
       occurredAt: a.pauseStartedAt,
-      durationS: Math.max(0, spanS),
+      durationS: pauseSpanSeconds(a.pauseStartedAt, a.resumedAt),
     });
   }
 
