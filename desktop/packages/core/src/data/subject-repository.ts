@@ -35,7 +35,7 @@ export class SqliteSubjectRepository implements SubjectRepository {
     private readonly now: () => Date = () => new Date(),
   ) {}
 
-  create(a: {
+  async create(a: {
     name: string;
     color?: string | null;
     source?: string;
@@ -59,10 +59,10 @@ export class SqliteSubjectRepository implements SubjectRepository {
         ts,
         ts,
       );
-    return Promise.resolve(id);
+    return id;
   }
 
-  update(
+  async update(
     id: string,
     a: { name: string; color: string | null; source: string; sourceName: string | null },
   ): Promise<void> {
@@ -73,27 +73,27 @@ export class SqliteSubjectRepository implements SubjectRepository {
           WHERE id = ?`,
       )
       .run(a.name, a.color, a.source, a.sourceName, toEpochSeconds(this.now()), id);
-    return Promise.resolve();
+    return;
   }
 
-  setArchived(id: string, archived: boolean): Promise<void> {
+  async setArchived(id: string, archived: boolean): Promise<void> {
     // node:sqlite refuses to bind a JS boolean (probed 2026-07-27), and schema
     // v1 stores this as INTEGER 0/1 anyway.
     this.db
       .prepare(`UPDATE subjects SET archived = ?, updated_at = ? WHERE id = ?`)
       .run(archived ? 1 : 0, toEpochSeconds(this.now()), id);
-    return Promise.resolve();
+    return;
   }
 
-  remove(id: string): Promise<void> {
+  async remove(id: string): Promise<void> {
     const ts = toEpochSeconds(this.now());
     this.db
       .prepare(`UPDATE subjects SET deleted_at = ?, updated_at = ? WHERE id = ?`)
       .run(ts, ts, id);
-    return Promise.resolve();
+    return;
   }
 
-  list(opts: { archived?: boolean } = {}): Promise<SubjectRow[]> {
+  async list(opts: { archived?: boolean } = {}): Promise<SubjectRow[]> {
     const rows = this.db
       .prepare(
         `SELECT ${SELECT_COLUMNS}
@@ -102,6 +102,6 @@ export class SqliteSubjectRepository implements SubjectRepository {
           ORDER BY created_at DESC, id DESC`,
       )
       .all<RawSubject>(opts.archived === true ? 1 : 0);
-    return Promise.resolve(rows.map(toRow));
+    return rows.map(toRow);
   }
 }

@@ -86,3 +86,47 @@ export interface SessionRepository {
 
   listHistory(): Promise<HistoryEntry[]>;
 }
+
+/** Read projection for the Stats inline expansion. */
+export interface InterruptionEntry {
+  kind: string;
+  occurredAt: Date;
+  durationS: number | null;
+}
+
+/**
+ * The single writer of the event log. Note what is NOT here: no parameter can
+ * carry an application name, a window title, or any other identifier. App
+ * identity is unrepresentable by construction (V3 spec §4.6), and `kind` is
+ * validated as a bare token by the implementation.
+ */
+export interface InterruptionRepository {
+  logSessionEvent(a: {
+    sessionId: string;
+    kind: string;
+    occurredAt: Date;
+    durationS?: number | null;
+    blocked?: boolean;
+  }): Promise<void>;
+
+  /** One append-only row per completed pause. Never insert-then-update. */
+  logPause(a: { sessionId: string; pauseStartedAt: Date; resumedAt: Date }): Promise<void>;
+
+  logSelfReport(a: { sessionId: string; occurredAt: Date }): Promise<void>;
+
+  countSelfReports(sessionId: string): Promise<number>;
+}
+
+export interface SurveyRepository {
+  /**
+   * Insert-only. `focusRating` is mandatory 1–5; the optional ratings are 1–5
+   * or null. Refused for any session that did not end normally.
+   */
+  save(a: {
+    sessionId: string;
+    focusRating: number;
+    comprehensionRating?: number | null;
+    difficultyRating?: number | null;
+    note?: string | null;
+  }): Promise<void>;
+}

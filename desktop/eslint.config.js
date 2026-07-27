@@ -22,6 +22,16 @@ export default tseslint.config(
     },
   },
   {
+    // The repositories implement Promise-returning ports (V3 spec §5) over a
+    // SYNCHRONOUS sqlite driver, so their bodies legitimately never await.
+    // `async` is load-bearing anyway: without it a validation failure or a
+    // constraint violation would throw synchronously out of a method declared
+    // to return a Promise, and `Promise.all([...])` or a bare `.catch()` would
+    // then get an uncaught exception instead of a rejection.
+    files: ['packages/*/src/data/*.ts', 'packages/*/src/db/local-user.ts'],
+    rules: { '@typescript-eslint/require-await': 'off' },
+  },
+  {
     // eslint.config.js and vitest.config.ts are not in any package tsconfig.
     files: ['**/*.config.{js,ts}'],
     extends: [tseslint.configs.disableTypeChecked],

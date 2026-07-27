@@ -25,7 +25,7 @@ export class SqliteSessionRepository implements SessionRepository {
     private readonly now: () => Date = () => new Date(),
   ) {}
 
-  insertStarted(s: ActiveSession): Promise<void> {
+  async insertStarted(s: ActiveSession): Promise<void> {
     const ts = toEpochSeconds(this.now());
     this.db
       .prepare(
@@ -34,7 +34,7 @@ export class SqliteSessionRepository implements SessionRepository {
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(s.id, localUserId, s.subjectId, s.mode, toEpochSeconds(s.startedAt), ts, ts);
-    return Promise.resolve();
+    return;
   }
 
   /**
@@ -46,7 +46,7 @@ export class SqliteSessionRepository implements SessionRepository {
    * `AND ended_at IS NULL` is the guard: an ended session is immutable at the
    * DATA layer, not merely by caller discipline (V3 spec §4.3).
    */
-  updatePausedDuration(id: string, totalPausedMs: number): Promise<void> {
+  async updatePausedDuration(id: string, totalPausedMs: number): Promise<void> {
     this.db
       .prepare(
         `UPDATE sessions
@@ -54,11 +54,11 @@ export class SqliteSessionRepository implements SessionRepository {
           WHERE id = ? AND ended_at IS NULL`,
       )
       .run(msToSeconds(totalPausedMs), toEpochSeconds(this.now()), id);
-    return Promise.resolve();
+    return;
   }
 
   /** The one-shot closing write, guarded the same way. */
-  end(a: {
+  async end(a: {
     id: string;
     endedAt: Date;
     actualDurationMs: number;
@@ -78,7 +78,7 @@ export class SqliteSessionRepository implements SessionRepository {
         toEpochSeconds(this.now()),
         a.id,
       );
-    return Promise.resolve();
+    return;
   }
 
   /**
@@ -93,7 +93,7 @@ export class SqliteSessionRepository implements SessionRepository {
    * *running* session is indistinguishable from a crashed one and would be
    * closed too. Call this once, before any session can start — never on a timer.
    */
-  recoverCrashedSessions(): Promise<number> {
+  async recoverCrashedSessions(): Promise<number> {
     const count = this.db.transaction(() => {
       const open = this.db
         .prepare(
@@ -117,7 +117,7 @@ export class SqliteSessionRepository implements SessionRepository {
       }
       return open.length;
     });
-    return Promise.resolve(count);
+    return count;
   }
 
   /**
@@ -125,7 +125,7 @@ export class SqliteSessionRepository implements SessionRepository {
    * archived subject must still name its sessions, which is the entire reason
    * subject deletion is soft.
    */
-  listHistory(): Promise<HistoryEntry[]> {
+  async listHistory(): Promise<HistoryEntry[]> {
     const rows = this.db
       .prepare(
         `SELECT s.id, sub.name AS subject_name, s.started_at,
@@ -136,14 +136,12 @@ export class SqliteSessionRepository implements SessionRepository {
           ORDER BY s.started_at DESC, s.id DESC`,
       )
       .all<RawHistory>();
-    return Promise.resolve(
-      rows.map((r) => ({
-        sessionId: r.id,
-        subjectName: r.subject_name,
-        startedAt: fromEpochSeconds(r.started_at),
-        actualDurationS: r.actual_duration_s ?? 0,
-        endReason: r.end_reason,
-      })),
-    );
+    return rows.map((r) => ({
+      sessionId: r.id,
+      subjectName: r.subject_name,
+      startedAt: fromEpochSeconds(r.started_at),
+      actualDurationS: r.actual_duration_s ?? 0,
+      endReason: r.end_reason,
+    }));
   }
 }
