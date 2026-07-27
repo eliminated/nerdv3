@@ -1,0 +1,21 @@
+{
+  "name": "@nerdyapp/app",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "out/main/nerdyapp.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "typecheck": "vue-tsc --noEmit",
+    "test": "vitest run",
+    "smoke": "electron-vite build && node scripts/smoke-product.mjs",
+    "smoke:product": "node scripts/smoke-product.mjs",
+    "smoke:test": "electron out/main/nerdyapp-test.js --smoke",
+    "verify:builds": "node scripts/verify-build-isolation.mjs"
+  },
+  "dependencies": {
+    "@nerdyapp/core": "0.1.0",
+    "vue": "^3.5.0"
+  }
+}

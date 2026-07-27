@@ -103,4 +103,44 @@ export class ActiveSession {
   elapsedMs(now: Date): number {
     return now.getTime() - this.startedAtMs - this.totalPausedMs(now);
   }
+
+  /**
+   * A structured-cloneable view, for crossing the Electron IPC boundary.
+   *
+   * A class instance cannot cross it — methods and getters are lost — so the
+   * renderer receives this and calls `restore()`. That matters more than
+   * convenience: it means the renderer computes elapsed time with THIS class's
+   * arithmetic, from timestamps, rather than reimplementing the formula beside
+   * a `setInterval` counter. There is one implementation of the timer law.
+   */
+  toSnapshot(): ActiveSessionSnapshot {
+    return {
+      id: this.id,
+      subjectId: this.subjectId,
+      mode: this.mode,
+      startedAtMs: this.startedAtMs,
+      accumulatedPauseMs: this.accumulatedPauseMs,
+      pauseStartedAtMs: this.pauseStartedAtMs,
+    };
+  }
+
+  static restore(s: ActiveSessionSnapshot): ActiveSession {
+    return new ActiveSession(
+      s.id,
+      s.subjectId,
+      s.mode,
+      s.startedAtMs,
+      s.accumulatedPauseMs,
+      s.pauseStartedAtMs,
+    );
+  }
+}
+
+export interface ActiveSessionSnapshot {
+  readonly id: string;
+  readonly subjectId: string;
+  readonly mode: string;
+  readonly startedAtMs: number;
+  readonly accumulatedPauseMs: number;
+  readonly pauseStartedAtMs: number | null;
 }

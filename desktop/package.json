@@ -11,14 +11,20 @@
   "scripts": {
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "eslint .",
-    "test": "npm run test --workspaces --if-present"
+    "test": "npm run test --workspaces --if-present",
+    "verify:sqlite": "electron scripts/verify-electron-sqlite.cjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.0",
     "@types/node": "^24.10.1",
+    "@vitejs/plugin-vue": "^6.0.8",
+    "electron": "^43.2.0",
+    "electron-vite": "^5.0.0",
     "eslint": "^9.39.0",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.46.0",
-    "vitest": "^3.2.4"
+    "vite": "^7.3.6",
+    "vitest": "^3.2.4",
+    "vue-tsc": "^3.3.8"
   }
 }

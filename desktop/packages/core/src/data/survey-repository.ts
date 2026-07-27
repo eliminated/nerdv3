@@ -1,16 +1,10 @@
 import type { Database } from '../db/connection.js';
-import { DomainStateError, ValidationError } from '../errors.js';
+import { DomainStateError } from '../errors.js';
 import { newId } from '../ids.js';
+import { withTranslatedErrors } from '../db/sqlite-errors.js';
 import { toEpochSeconds } from '../time.js';
 import type { SurveyRepository } from './ports.js';
-
-/**
- * Both normal endings. Only `'crashed'` is refused: a crashed session's
- * duration is a lower-bound estimate, so letting one carry a rating would drag
- * a legitimately good day below Phase 5's 3.0 qualification threshold
- * (data-model.md §5.1).
- */
-const SURVEYABLE_END_REASONS = new Set(['completed', 'user_ended']);
+import { assertFocusRating, assertRating, SURVEYABLE_END_REASONS } from './rules.js';
 
 /**
  * Writes the post-session survey — the app's core signal (data-model.md §3.5)
@@ -40,17 +34,13 @@ export class SqliteSurveyRepository implements SurveyRepository {
     difficultyRating?: number | null;
     note?: string | null;
   }): Promise<void> {
-    // focusRating is MANDATORY, so it is checked before the nullable path:
-    // checkRange returns early on null, and the V3-B IPC boundary erases the
-    // `number` type — a missing field deserialises to null, which would
-    // otherwise sail through to a raw NOT NULL constraint error instead of the
-    // typed ValidationError this class promises.
-    if (a.focusRating === null || a.focusRating === undefined) {
-      throw new ValidationError('focusRating is required and must be an integer 1..5');
-    }
-    checkRange('focusRating', a.focusRating);
-    checkRange('comprehensionRating', a.comprehensionRating ?? null);
-    checkRange('difficultyRating', a.difficultyRating ?? null);
+    // focusRating is MANDATORY and checked before the nullable path: the
+    // V3-B IPC boundary erases the `number` type, so a missing field arrives as
+    // null and would otherwise sail through to a raw NOT NULL constraint error
+    // instead of the typed ValidationError this class promises.
+    assertFocusRating(a.focusRating);
+    assertRating('comprehensionRating', a.comprehensionRating ?? null);
+    assertRating('difficultyRating', a.difficultyRating ?? null);
     const trimmed = a.note?.trim() ?? '';
 
     this.db.transaction(() => {
@@ -90,39 +80,27 @@ export class SqliteSurveyRepository implements SurveyRepository {
       }
 
       const ts = toEpochSeconds(this.now());
-      this.db
-        .prepare(
-          `INSERT INTO session_surveys
+      // Translated: a second survey for one session must fail as the same typed
+      // error in both bindings, since `kind` crosses IPC to the renderer.
+      withTranslatedErrors(() =>
+        this.db
+          .prepare(
+            `INSERT INTO session_surveys
              (id, session_id, focus_rating, comprehension_rating, difficulty_rating,
               note, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        )
-        .run(
-          newId(),
-          a.sessionId,
-          a.focusRating,
-          a.comprehensionRating ?? null,
-          a.difficultyRating ?? null,
-          trimmed === '' ? null : trimmed,
-          ts,
-          ts,
-        );
+          )
+          .run(
+            newId(),
+            a.sessionId,
+            a.focusRating,
+            a.comprehensionRating ?? null,
+            a.difficultyRating ?? null,
+            trimmed === '' ? null : trimmed,
+            ts,
+            ts,
+          ),
+      );
     });
-  }
-}
-
-/**
- * Validated here rather than left to the CHECK constraints, so a bad rating
- * fails as a typed ValidationError at the boundary instead of as a raw SQLite
- * error whose shape differs between bindings.
- *
- * `Number.isInteger` is the load-bearing half: SQLite would happily store 2.5
- * in an INTEGER column (it has no strict typing without STRICT tables), and the
- * BETWEEN 1 AND 5 check would pass it.
- */
-function checkRange(name: string, value: number | null): void {
-  if (value === null) return;
-  if (!Number.isInteger(value) || value < 1 || value > 5) {
-    throw new ValidationError(`${name} must be an integer 1..5, got ${String(value)}`);
   }
 }

@@ -56,6 +56,13 @@ export interface HistoryEntry {
   subjectName: string;
   startedAt: Date;
   actualDurationS: number;
+  /**
+   * Exposed so the post-end immutability contract is OBSERVABLE through the
+   * port. Without it, a fixture that dropped its `ended_at` guard on
+   * updatePausedDuration passed the shared suite — the effect had nowhere to
+   * show up.
+   */
+  pausedDurationS: number;
   /** 'user_ended' | 'completed' | 'crashed' — null only for a row still open. */
   endReason: string | null;
 }

@@ -2,7 +2,9 @@ import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-  { ignores: ['**/node_modules/**', '**/dist/**', '**/coverage/**'] },
+  // `out/` is electron-vite's build output — bundled JS that is not in any
+  // tsconfig, so type-aware rules crash on it rather than merely reporting.
+  { ignores: ['**/node_modules/**', '**/dist/**', '**/coverage/**', '**/out/**'] },
   js.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,
   {
@@ -28,12 +30,42 @@ export default tseslint.config(
     // constraint violation would throw synchronously out of a method declared
     // to return a Promise, and `Promise.all([...])` or a bare `.catch()` would
     // then get an uncaught exception instead of a rejection.
-    files: ['packages/*/src/data/*.ts', 'packages/*/src/db/local-user.ts'],
+    // `**` on purpose: data/fixtures/ holds the second binding, and it is
+    // synchronous for the same reason — it is an in-memory implementation of an
+    // async port.
+    files: ['packages/*/src/data/**/*.ts', 'packages/*/src/db/local-user.ts'],
     rules: { '@typescript-eslint/require-await': 'off' },
   },
   {
-    // eslint.config.js and vitest.config.ts are not in any package tsconfig.
-    files: ['**/*.config.{js,ts}'],
+    // Files outside every package tsconfig, so type-aware rules cannot run and
+    // would CRASH rather than report: the config files themselves, and the
+    // CommonJS Electron guard under scripts/.
+    files: ['**/*.config.{js,ts}', '**/*.cjs', '**/*.mjs'],
     extends: [tseslint.configs.disableTypeChecked],
+  },
+  {
+    // The verification scripts are plain Node, outside every package tsconfig
+    // on purpose: whether the runtime works must not depend on the build
+    // working. The sqlite guard is CommonJS because Electron loads it directly;
+    // the build-isolation guard is ESM because it only reads files.
+    files: ['**/*.cjs', '**/*.mjs'],
+    languageOptions: {
+      globals: {
+        require: 'readonly',
+        module: 'writable',
+        exports: 'writable',
+        __dirname: 'readonly',
+        __filename: 'readonly',
+        console: 'readonly',
+        process: 'readonly',
+        Buffer: 'readonly',
+        URL: 'readonly',
+      },
+    },
+    rules: { '@typescript-eslint/no-require-imports': 'off' },
+  },
+  {
+    files: ['**/*.cjs'],
+    languageOptions: { sourceType: 'commonjs' },
   },
 );

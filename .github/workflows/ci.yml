@@ -80,3 +80,21 @@ jobs:
         run: npm run lint
       - name: Test
         run: npm test
+      # Electron bundles its OWN Node. node:sqlite existing in the CI runner's
+      # Node proves nothing about the shipped app, and the failure mode is
+      # silent: core would still typecheck and its whole suite would still pass
+      # while the app could not open a database at all.
+      - name: Verify node:sqlite works in Electron
+        run: npm run verify:sqlite
+      - name: Build the desktop app
+        run: npm run build --workspace @nerdyapp/app
+      # No fixture seed string may survive tree-shaking into the product
+      # bundle: example data must never be able to ship as real study history.
+      - name: Verify build isolation
+        run: npm run verify:builds --workspace @nerdyapp/app
+      # Drives a real session through the real UI — create a subject, start,
+      # pause, resume, distraction, end, history — in both builds.
+      - name: Smoke the product build
+        run: npm run smoke:product --workspace @nerdyapp/app
+      - name: Smoke the test build
+        run: npm run smoke:test --workspace @nerdyapp/app

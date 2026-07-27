@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./domain": "./src/domain/active-session.ts",
+    "./schema.sql": "./src/db/schema.sql"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
