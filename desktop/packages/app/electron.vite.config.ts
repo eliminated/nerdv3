@@ -7,7 +7,10 @@ const r = (p: string): string => fileURLToPath(new URL(p, import.meta.url));
 
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin()],
+    // `@nerdyapp/core` must be BUNDLED, not externalized: it is a workspace
+    // package whose `exports` points at raw TypeScript with no build step, so
+    // an externalized import would hand Node a .ts file at runtime.
+    plugins: [externalizeDepsPlugin({ exclude: ['@nerdyapp/core'] })],
     build: {
       // Every outDir is pinned relative to THIS package. `renderer.root` points
       // at src/renderer, and vite resolves outDir against root — so without

@@ -7,6 +7,7 @@
  */
 import { fileURLToPath, URL } from 'node:url';
 
+import { createFixtureBinding } from './main/bindings-fixture.js';
 import { start } from './main/index.js';
 
 // This file is a rollup ENTRY, so it is never hoisted into a chunk and its
@@ -16,4 +17,5 @@ start({
   label: 'NerdyApp (test build — example data, no database)',
   usesDatabase: false,
   outRoot: fileURLToPath(new URL('..', import.meta.url)),
+  open: () => createFixtureBinding(),
 });

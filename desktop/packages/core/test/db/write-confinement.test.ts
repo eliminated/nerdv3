@@ -90,7 +90,26 @@ const SCANNED_EXTENSIONS = [
   '.vue', '.sql',
 ];
 
-const SKIP_DIRS = new Set(['node_modules', 'dist', 'coverage', '.git', 'test', 'tests', '__tests__']);
+/**
+ * `out` and `dist` are BUILD OUTPUT — electron-vite bundles `core` into the
+ * main-process file, so the bundle naturally contains every SQL string the
+ * repositories hold. Scanning it would flag a legitimate build every time, and
+ * skipping it opens no hole: the bundle is generated from source that IS
+ * scanned, so a leak has to exist in a scanned file first.
+ *
+ * `test` is skipped because tests legitimately assert on the table, and are not
+ * shipped.
+ */
+const SKIP_DIRS = new Set([
+  'node_modules',
+  'dist',
+  'out',
+  'coverage',
+  '.git',
+  'test',
+  'tests',
+  '__tests__',
+]);
 
 /** Tests legitimately assert on the table, and are not shipped. */
 const isTestFile = (name: string): boolean => /\.(test|spec)\.[cm]?[jt]sx?$/.test(name);

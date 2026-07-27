@@ -7,6 +7,9 @@
  */
 import { fileURLToPath, URL } from 'node:url';
 
+import { app } from 'electron';
+
+import { createSqliteBinding } from './main/bindings-sqlite.js';
 import { start } from './main/index.js';
 
 // This file is a rollup ENTRY, so it is never hoisted into a chunk and its
@@ -16,4 +19,5 @@ start({
   label: 'NerdyApp',
   usesDatabase: true,
   outRoot: fileURLToPath(new URL('..', import.meta.url)),
+  open: () => createSqliteBinding(app.getPath('appData')),
 });

@@ -1,5 +1,6 @@
 import { join } from 'node:path';
 
+import type { Repositories } from '@nerdyapp/core';
 import { app, BrowserWindow } from 'electron';
 
 /**
@@ -31,6 +32,13 @@ export interface AppBindings {
   readonly usesDatabase: boolean;
   /** Absolute path of the built `out/` directory. See the note on `outRoot`. */
   readonly outRoot: string;
+  /**
+   * Built AFTER `app.whenReady()`, because the product binding needs
+   * `app.getPath('appData')` and runs crash recovery — both of which must
+   * happen before a window can exist, and neither of which is available at
+   * module load.
+   */
+  readonly open: () => { repositories: Repositories; close: () => void };
 }
 
 const isSmoke = process.argv.includes('--smoke');
@@ -63,6 +71,14 @@ function createWindow(bindings: AppBindings): BrowserWindow {
 export function start(bindings: AppBindings): void {
   outRoot = bindings.outRoot;
   void app.whenReady().then(async () => {
+    // Opened BEFORE the window. For the product this is where the database is
+    // created and crash recovery runs; a window that could start a session
+    // before recovery finished would have its own session closed as crashed.
+    const opened = bindings.open();
+    app.on('will-quit', () => {
+      opened.close();
+    });
+
     const win = createWindow(bindings);
 
     if (isSmoke) {
