@@ -75,11 +75,26 @@
 >    `shared/ipc.ts`, a main handler, the preload object AND the surface test together.
 > **Do not re-litigate** the seven carried-over invariants in V3 spec §4.
 >
-> **Next-session execution:** **Hybrid** — inline by default, dedicated independent review on
-> correctness-critical work. It has now paid for itself five times. **The lesson this slice adds:
-> every guard here inspected source, and the two worst findings — a live exploit and a polluted
-> real database — were only visible by running the built artefact and looking at the file on disk.
-> Ask what the thing DOES, not only what the code says.**
+> **Next-session execution (chosen this handoff, 2026-07-27):**
+> - **Mode: Hybrid** — inline by default, with a **dedicated independent review pass on the risky
+>   pieces only**. Isaac's standing choice, confirmed again for V3-C. No per-role subagent model
+>   table applies.
+> - **V3-C's review targets** (name them when dispatching, don't review the whole slice):
+>   1. **The survey interaction budget.** Phase 2's exit criterion is ≤2 interactions for the common
+>      path and 1 to dismiss, counted **mechanically from real events** — the Flutter build proved
+>      `enterText` dispatches neither a pointer nor a key event, so a hand-counted or
+>      wrong-mechanism counter is worthless. This is the one V3-C deliverable with a numeric gate.
+>   2. **Decision V3-1, reactivity.** It touches every view at once, and getting it wrong is a
+>      rewrite rather than a fix.
+> - **Why not full subagent-driven:** V2 was abandoned partly over exactly that — ~4 agent
+>   round-trips per task meant a ten-task phase implied ~7 hours with little visible progress
+>   (masterplan §1a). Hybrid has caught a real defect in every slice it has run on, five for five.
+>
+> **⚠️ THE LESSON THIS SLICE ADDS, carried at the top of the gotchas: every guard in V3-B inspected
+> SOURCE, and the two worst findings — a live navigation exploit and a smoke run that had been
+> writing junk into the real database for hours — were invisible to all of them. Both needed
+> someone to run the built artefact and look at the file on disk. Ask what the thing DOES, not only
+> what the code says.**
 > ---
 > ## ⏪ PREVIOUS (2026-07-27, "V3-A — core in TypeScript" session)
 >
